@@ -36,7 +36,7 @@ pub fn scan_workspaces(monorepo_root: &Path) -> Vec<WorkspacePackage> {
                 .strip_prefix(monorepo_root)
                 .unwrap_or(&dir)
                 .to_string_lossy()
-                .to_string();
+                .replace('\\', "/");
 
             let (name, scripts) = read_package_info(&dir);
 
