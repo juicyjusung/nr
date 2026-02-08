@@ -120,7 +120,14 @@ See `assets/README.md` for more details.
 
 ## Contributing
 
-Contributions are welcome! Feel free to open issues and pull requests.
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
+
+- Setting up your development environment
+- Code style and testing guidelines
+- Commit message conventions
+- Pull request process
+
+Feel free to open issues for bugs or feature requests, or join discussions about the project's future.
 
 ## License
 
