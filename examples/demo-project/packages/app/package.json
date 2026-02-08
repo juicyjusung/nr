@@ -1,0 +1,9 @@
+{
+  "name": "@demo/app",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "echo 'Starting app dev server...'",
+    "build": "echo 'Building app...'",
+    "test": "echo 'Testing app...'"
+  }
+}

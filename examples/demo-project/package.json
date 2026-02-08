@@ -1,0 +1,23 @@
+{
+  "name": "demo-project",
+  "version": "1.0.0",
+  "description": "Demo project for nr",
+  "scripts": {
+    "dev": "echo 'Starting development server...'",
+    "build": "echo 'Building project...'",
+    "build:prod": "echo 'Building for production...'",
+    "test": "echo 'Running tests...'",
+    "test:unit": "echo 'Running unit tests...'",
+    "test:e2e": "echo 'Running e2e tests...'",
+    "lint": "echo 'Linting code...'",
+    "lint:fix": "echo 'Fixing linting issues...'",
+    "format": "echo 'Formatting code...'",
+    "clean": "echo 'Cleaning build artifacts...'",
+    "deploy": "echo 'Deploying application...'",
+    "deploy:staging": "echo 'Deploying to staging...'",
+    "start": "echo 'Starting production server...'"
+  },
+  "workspaces": [
+    "packages/*"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "@demo/ui",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "echo 'Starting UI dev server...'",
+    "build": "echo 'Building UI components...'",
+    "storybook": "echo 'Starting Storybook...'"
+  }
+}

@@ -6,8 +6,19 @@
 [![Release](https://img.shields.io/github/v/release/juicyjusung/nr)](https://github.com/juicyjusung/nr/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-<!-- TODO: Add demo GIF -->
-<!-- ![demo](assets/demo.gif) -->
+![demo](assets/demo.gif)
+
+<details>
+<summary>📹 What's happening in the demo?</summary>
+
+The demo showcases:
+- **Fuzzy search**: Typing `tst` finds "test", `bld` finds "build" - no exact names needed!
+- **Navigation**: Use `↑` `↓` arrow keys to browse scripts
+- **Favorites**: Press `Space` to star your most-used scripts
+- **Monorepo support**: Press `→` to switch to Packages tab, `Enter` to view package scripts, `←` to go back
+- **Quick exit**: Press `Esc` to quit anytime
+
+</details>
 
 ## Why nr?
 
@@ -84,6 +95,28 @@ Requires Rust 1.85+.
 ```bash
 cargo build --release
 ```
+
+### Generating Demo GIF
+
+To regenerate the demo GIF:
+
+```bash
+# Install VHS
+brew install vhs
+
+# Generate demo
+./scripts/generate-demo.sh
+```
+
+Or manually:
+
+```bash
+cargo build --release
+export PATH="$PWD/target/release:$PATH"
+vhs demo.tape
+```
+
+See `assets/README.md` for more details.
 
 ## Contributing
 
