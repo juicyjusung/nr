@@ -17,7 +17,10 @@ pub fn render_header_bar(
         Span::styled("  ", Style::default()),
         Span::styled(package_manager, Style::default().fg(Color::Green)),
     ]);
-    frame.render_widget(Paragraph::new(line), area);
+    frame.render_widget(
+        Paragraph::new(line).style(Style::default().bg(Color::DarkGray)),
+        area,
+    );
 }
 
 fn shorten_path(path: &str) -> String {

@@ -14,6 +14,16 @@ pub fn render_script_list(
     favorites: &HashSet<String>,
 ) {
     let visible_height = area.height as usize;
+
+    // Calculate dynamic name column width from filtered scripts
+    let name_width = filtered_indices
+        .iter()
+        .map(|&i| scripts[i].name.len())
+        .max()
+        .unwrap_or(20)
+        .max(12) // minimum 12 chars
+        + 2; // padding
+
     let mut lines: Vec<Line> = Vec::new();
 
     for (display_i, &script_i) in filtered_indices
@@ -27,27 +37,41 @@ pub fn render_script_list(
         let is_favorite = favorites.contains(&script.key);
 
         let star = if is_favorite { "★ " } else { "  " };
-        let cursor = if is_selected { "❯ " } else { "  " };
+        let cursor = if is_selected { "▎" } else { " " };
 
         let line = Line::from(vec![
             Span::styled(
                 cursor,
                 if is_selected {
-                    Style::default().bold()
+                    Style::default().fg(Color::Cyan).bg(Color::DarkGray)
                 } else {
                     Style::default()
                 },
             ),
-            Span::styled(star, Style::default().fg(Color::Yellow)),
             Span::styled(
-                format!("{:<20}", &script.name),
+                star,
                 if is_selected {
-                    Style::default().bold()
+                    Style::default().fg(Color::Yellow).bg(Color::DarkGray)
+                } else {
+                    Style::default().fg(Color::Yellow)
+                },
+            ),
+            Span::styled(
+                format!("{:<width$}", &script.name, width = name_width),
+                if is_selected {
+                    Style::default().bold().bg(Color::DarkGray)
                 } else {
                     Style::default()
                 },
             ),
-            Span::styled(&script.command, Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                &script.command,
+                if is_selected {
+                    Style::default().fg(Color::Gray).bg(Color::DarkGray)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                },
+            ),
         ]);
         lines.push(line);
     }
