@@ -5,6 +5,8 @@ edition = "2024"
 rust-version = "1.85"
 description = "TUI-based npm script runner with fuzzy search"
 license = "MIT"
+repository = "https://github.com/juicyjusung/nr"
+homepage = "https://github.com/juicyjusung/nr"
 
 [dependencies]
 ratatui = { version = "0.30", default-features = false, features = ["crossterm_0_29"] }
@@ -29,3 +31,14 @@ opt-level = "z"
 lto = true
 codegen-units = 1
 panic = "abort"
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/nr-v{ version }-{ target-triple }.{ archive-format }"
+bin-dir = "nr-v{ version }-{ target-triple }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+
+[package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
+pkg-fmt = "zip"

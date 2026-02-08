@@ -1,0 +1,250 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            runner: macos-13
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            runner: macos-14
+            archive: tar.gz
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            archive: tar.gz
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-latest
+            archive: tar.gz
+            cross: true
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            archive: zip
+          - target: aarch64-pc-windows-msvc
+            runner: windows-latest
+            archive: zip
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --locked
+
+      - name: Build
+        run: |
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+        shell: bash
+
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Package (Unix)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          ARCHIVE_DIR="nr-v${{ steps.version.outputs.version }}-${{ matrix.target }}"
+          mkdir "$ARCHIVE_DIR"
+          cp "target/${{ matrix.target }}/release/nr" "$ARCHIVE_DIR/"
+          cp README.md "$ARCHIVE_DIR/" 2>/dev/null || true
+          cp LICENSE "$ARCHIVE_DIR/" 2>/dev/null || true
+          tar czf "${ARCHIVE_DIR}.tar.gz" "$ARCHIVE_DIR"
+        shell: bash
+
+      - name: Package (Windows)
+        if: matrix.archive == 'zip'
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $archiveDir = "nr-v${version}-${{ matrix.target }}"
+          New-Item -ItemType Directory -Path $archiveDir | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/nr.exe" "$archiveDir/"
+          Copy-Item "README.md" "$archiveDir/" -ErrorAction SilentlyContinue
+          Copy-Item "LICENSE" "$archiveDir/" -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$archiveDir" -DestinationPath "${archiveDir}.zip"
+        shell: pwsh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nr-${{ matrix.target }}
+          path: nr-v${{ steps.version.outputs.version }}-${{ matrix.target }}.${{ matrix.archive }}
+
+  release:
+    name: Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum nr-v* > "nr-v${{ steps.version.outputs.version }}-checksums.sha256"
+
+      - name: Upload to GitHub Release
+        run: gh release upload "${{ github.ref_name }}" artifacts/* --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  homebrew:
+    name: Update Homebrew
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download checksums
+        run: gh release download "${{ github.ref_name }}" --pattern "*checksums*" --dir checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Homebrew formula
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ github.ref_name }}"
+
+          X86_SHA=$(grep "x86_64-apple-darwin" checksums/nr-v${VERSION}-checksums.sha256 | awk '{print $1}')
+          ARM_SHA=$(grep "aarch64-apple-darwin" checksums/nr-v${VERSION}-checksums.sha256 | awk '{print $1}')
+          LINUX_X86_SHA=$(grep "x86_64-unknown-linux-gnu" checksums/nr-v${VERSION}-checksums.sha256 | awk '{print $1}')
+          LINUX_ARM_SHA=$(grep "aarch64-unknown-linux-gnu" checksums/nr-v${VERSION}-checksums.sha256 | awk '{print $1}')
+
+          mkdir -p Formula
+          cat > Formula/nr.rb << EOF
+          class Nr < Formula
+            desc "TUI-based npm script runner with fuzzy search"
+            homepage "https://github.com/juicyjusung/nr"
+            license "MIT"
+            version "${VERSION}"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/juicyjusung/nr/releases/download/${TAG}/nr-v${VERSION}-aarch64-apple-darwin.tar.gz"
+                sha256 "${ARM_SHA}"
+              else
+                url "https://github.com/juicyjusung/nr/releases/download/${TAG}/nr-v${VERSION}-x86_64-apple-darwin.tar.gz"
+                sha256 "${X86_SHA}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/juicyjusung/nr/releases/download/${TAG}/nr-v${VERSION}-aarch64-unknown-linux-gnu.tar.gz"
+                sha256 "${LINUX_ARM_SHA}"
+              else
+                url "https://github.com/juicyjusung/nr/releases/download/${TAG}/nr-v${VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+                sha256 "${LINUX_X86_SHA}"
+              end
+            end
+
+            def install
+              bin.install "nr"
+            end
+
+            test do
+              assert_match "nr", shell_output("#{bin}/nr --help 2>&1", 1)
+            end
+          end
+          EOF
+
+      - name: Push to homebrew-tap
+        run: |
+          git clone "https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/juicyjusung/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp Formula/nr.rb tap/Formula/nr.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/nr.rb
+          git diff --cached --quiet || git commit -m "nr ${{ steps.version.outputs.version }}"
+          git push
+
+  scoop:
+    name: Update Scoop
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download checksums
+        run: gh release download "${{ github.ref_name }}" --pattern "*checksums*" --dir checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Scoop manifest
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ github.ref_name }}"
+
+          X86_SHA=$(grep "x86_64-pc-windows-msvc" checksums/nr-v${VERSION}-checksums.sha256 | awk '{print $1}')
+          ARM_SHA=$(grep "aarch64-pc-windows-msvc" checksums/nr-v${VERSION}-checksums.sha256 | awk '{print $1}')
+
+          cat > scoop/nr.json << EOF
+          {
+            "version": "${VERSION}",
+            "description": "TUI-based npm script runner with fuzzy search",
+            "homepage": "https://github.com/juicyjusung/nr",
+            "license": "MIT",
+            "architecture": {
+              "64bit": {
+                "url": "https://github.com/juicyjusung/nr/releases/download/${TAG}/nr-v${VERSION}-x86_64-pc-windows-msvc.zip",
+                "hash": "${X86_SHA}",
+                "bin": "nr-v${VERSION}-x86_64-pc-windows-msvc\\\\nr.exe"
+              },
+              "arm64": {
+                "url": "https://github.com/juicyjusung/nr/releases/download/${TAG}/nr-v${VERSION}-aarch64-pc-windows-msvc.zip",
+                "hash": "${ARM_SHA}",
+                "bin": "nr-v${VERSION}-aarch64-pc-windows-msvc\\\\nr.exe"
+              }
+            }
+          }
+          EOF
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add scoop/nr.json
+          git diff --cached --quiet || git commit -m "scoop: update nr to ${{ steps.version.outputs.version }}"
+          git push
