@@ -575,3 +575,466 @@ fn ensure_scroll(scroll_offset: &mut usize, selected: usize, visible_height: usi
         *scroll_offset = selected.saturating_sub(height - 1);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Test helper to create SortableScript
+    fn script(name: &str, command: &str) -> SortableScript {
+        SortableScript {
+            key: format!("root:{}", name),
+            name: name.to_string(),
+            command: command.to_string(),
+        }
+    }
+
+    // Test builder for App
+    struct TestAppBuilder {
+        scripts: Vec<SortableScript>,
+        workspace_packages: Vec<WorkspacePackage>,
+        favorites: HashSet<String>,
+        recents: Vec<RecentEntry>,
+        visible_height: usize,
+        has_workspaces: bool,
+    }
+
+    impl TestAppBuilder {
+        fn new() -> Self {
+            Self {
+                scripts: vec![],
+                workspace_packages: vec![],
+                favorites: HashSet::new(),
+                recents: vec![],
+                visible_height: 20,
+                has_workspaces: false,
+            }
+        }
+
+        fn with_scripts(mut self, scripts: Vec<SortableScript>) -> Self {
+            self.scripts = scripts;
+            self
+        }
+
+        fn with_favorite(mut self, key: &str) -> Self {
+            self.favorites.insert(key.to_string());
+            self
+        }
+
+        fn with_workspaces(mut self, packages: Vec<WorkspacePackage>) -> Self {
+            self.has_workspaces = !packages.is_empty();
+            self.workspace_packages = packages;
+            self
+        }
+
+        fn build(self) -> App {
+            let filtered_indices = sort_scripts(&self.scripts, &self.favorites, &self.recents, "");
+            let pkg_filtered_indices: Vec<usize> = (0..self.workspace_packages.len()).collect();
+
+            App {
+                active_tab: Tab::Scripts,
+                package_mode: PackageMode::SelectingPackage,
+                has_workspaces: self.has_workspaces,
+                scripts: self.scripts,
+                workspace_packages: self.workspace_packages,
+                nearest_pkg: PathBuf::from("/test/project"),
+                monorepo_root: None,
+                favorites: self.favorites,
+                recents: self.recents,
+                project_name: "test-project".to_string(),
+                project_path: "/test/project".to_string(),
+                package_manager_name: "npm".to_string(),
+                visible_height: self.visible_height,
+                query: String::new(),
+                selected_index: 0,
+                scroll_offset: 0,
+                filtered_indices,
+                pkg_query: String::new(),
+                pkg_selected_index: 0,
+                pkg_scroll_offset: 0,
+                pkg_filtered_indices,
+                pkg_script_query: String::new(),
+                pkg_script_selected_index: 0,
+                pkg_script_scroll_offset: 0,
+                pkg_script_filtered_indices: Vec::new(),
+                pkg_script_sortable: Vec::new(),
+            }
+        }
+    }
+
+    // --- move_selection tests ---
+
+    #[test]
+    fn test_move_selection_down_increments_index() {
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![
+                script("test", "echo test"),
+                script("build", "echo build"),
+                script("lint", "echo lint"),
+            ])
+            .build();
+
+        assert_eq!(app.selected_index, 0);
+        app.move_selection(1);
+        assert_eq!(app.selected_index, 1);
+        app.move_selection(1);
+        assert_eq!(app.selected_index, 2);
+    }
+
+    #[test]
+    fn test_move_selection_up_decrements_index() {
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![
+                script("test", "echo test"),
+                script("build", "echo build"),
+                script("lint", "echo lint"),
+            ])
+            .build();
+
+        app.selected_index = 2;
+        app.move_selection(-1);
+        assert_eq!(app.selected_index, 1);
+        app.move_selection(-1);
+        assert_eq!(app.selected_index, 0);
+    }
+
+    #[test]
+    fn test_move_selection_wraps_at_bottom() {
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![
+                script("test", "echo test"),
+                script("build", "echo build"),
+            ])
+            .build();
+
+        app.selected_index = 1; // last item
+        app.move_selection(1); // should wrap to 0
+        assert_eq!(app.selected_index, 0);
+    }
+
+    #[test]
+    fn test_move_selection_wraps_at_top() {
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![
+                script("test", "echo test"),
+                script("build", "echo build"),
+            ])
+            .build();
+
+        assert_eq!(app.selected_index, 0);
+        app.move_selection(-1); // should wrap to last
+        assert_eq!(app.selected_index, 1);
+    }
+
+    #[test]
+    fn test_move_selection_handles_empty_list() {
+        let mut app = TestAppBuilder::new().build();
+        assert_eq!(app.selected_index, 0);
+        app.move_selection(1);
+        assert_eq!(app.selected_index, 0); // no change
+    }
+
+    // --- toggle_fav tests ---
+
+    #[test]
+    fn test_toggle_fav_adds_to_favorites() {
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![script("test", "echo test")])
+            .build();
+
+        let key = "root:test";
+        assert!(!app.favorites.contains(key));
+
+        app.toggle_fav();
+        assert!(app.favorites.contains(key));
+    }
+
+    #[test]
+    fn test_toggle_fav_removes_from_favorites() {
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![script("test", "echo test")])
+            .with_favorite("root:test")
+            .build();
+
+        assert!(app.favorites.contains("root:test"));
+        app.toggle_fav();
+        assert!(!app.favorites.contains("root:test"));
+    }
+
+    #[test]
+    fn test_toggle_fav_updates_filtered_indices() {
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![
+                script("aaa", "echo aaa"),
+                script("zzz", "echo zzz"),
+            ])
+            .build();
+
+        // Initially alphabetical order: aaa, zzz
+        assert_eq!(app.filtered_indices, vec![0, 1]);
+
+        // Toggle favorite on zzz (index 1)
+        app.selected_index = 1;
+        app.toggle_fav();
+
+        // Now favorites come first: zzz, aaa
+        assert_eq!(app.filtered_indices, vec![1, 0]);
+    }
+
+    // --- switch_tab tests ---
+
+    #[test]
+    fn test_switch_tab_changes_to_packages() {
+        let pkg = WorkspacePackage {
+            name: "pkg1".to_string(),
+            relative_path: "packages/pkg1".to_string(),
+            scripts: IndexMap::new(),
+        };
+
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![script("test", "echo test")])
+            .with_workspaces(vec![pkg])
+            .build();
+
+        assert_eq!(app.active_tab, Tab::Scripts);
+        app.switch_tab(1);
+        assert_eq!(app.active_tab, Tab::Packages);
+    }
+
+    #[test]
+    fn test_switch_tab_changes_to_scripts() {
+        let pkg = WorkspacePackage {
+            name: "pkg1".to_string(),
+            relative_path: "packages/pkg1".to_string(),
+            scripts: IndexMap::new(),
+        };
+
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![script("test", "echo test")])
+            .with_workspaces(vec![pkg])
+            .build();
+
+        app.active_tab = Tab::Packages;
+        app.switch_tab(-1);
+        assert_eq!(app.active_tab, Tab::Scripts);
+    }
+
+    #[test]
+    fn test_switch_tab_does_nothing_without_workspaces() {
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![script("test", "echo test")])
+            .build();
+
+        assert_eq!(app.active_tab, Tab::Scripts);
+        app.switch_tab(1);
+        assert_eq!(app.active_tab, Tab::Scripts); // no change
+    }
+
+    // --- type_char / delete_char tests ---
+
+    #[test]
+    fn test_type_char_updates_query() {
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![script("test", "echo test")])
+            .build();
+
+        assert_eq!(app.query, "");
+        app.type_char('t');
+        assert_eq!(app.query, "t");
+        app.type_char('e');
+        assert_eq!(app.query, "te");
+    }
+
+    #[test]
+    fn test_delete_char_removes_last_char() {
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![script("test", "echo test")])
+            .build();
+
+        app.query = "test".to_string();
+        app.delete_char();
+        assert_eq!(app.query, "tes");
+        app.delete_char();
+        assert_eq!(app.query, "te");
+    }
+
+    #[test]
+    fn test_delete_char_on_empty_query() {
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![script("test", "echo test")])
+            .build();
+
+        assert_eq!(app.query, "");
+        app.delete_char();
+        assert_eq!(app.query, ""); // no panic, no change
+    }
+
+    // --- update_filtered tests ---
+
+    #[test]
+    fn test_update_filtered_with_empty_query() {
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![
+                script("build", "echo build"),
+                script("test", "echo test"),
+            ])
+            .build();
+
+        app.query = "".to_string();
+        app.update_filtered();
+
+        // Should return all scripts in alphabetical order
+        assert_eq!(app.filtered_indices.len(), 2);
+    }
+
+    #[test]
+    fn test_update_filtered_with_query_filters_correctly() {
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![
+                script("build", "echo build"),
+                script("test", "echo test"),
+                script("lint", "echo lint"),
+            ])
+            .build();
+
+        app.query = "te".to_string();
+        app.update_filtered();
+
+        // Should only match "test"
+        assert_eq!(app.filtered_indices.len(), 1);
+        assert_eq!(app.scripts[app.filtered_indices[0]].name, "test");
+    }
+
+    #[test]
+    fn test_update_filtered_resets_selection() {
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![
+                script("build", "echo build"),
+                script("test", "echo test"),
+            ])
+            .build();
+
+        app.selected_index = 1;
+        app.scroll_offset = 5;
+
+        app.update_filtered();
+
+        assert_eq!(app.selected_index, 0);
+        assert_eq!(app.scroll_offset, 0);
+    }
+
+    // --- handle_esc tests ---
+
+    #[test]
+    fn test_handle_esc_on_scripts_tab_quits() {
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![script("test", "echo test")])
+            .build();
+
+        let action = app.handle_esc();
+        assert!(matches!(action, Action::Quit));
+    }
+
+    #[test]
+    fn test_handle_esc_in_package_mode_goes_back() {
+        let pkg = WorkspacePackage {
+            name: "pkg1".to_string(),
+            relative_path: "packages/pkg1".to_string(),
+            scripts: {
+                let mut map = IndexMap::new();
+                map.insert("test".to_string(), "echo test".to_string());
+                map
+            },
+        };
+
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![script("test", "echo test")])
+            .with_workspaces(vec![pkg])
+            .build();
+
+        // Enter package script mode
+        app.active_tab = Tab::Packages;
+        app.enter_package_scripts(0);
+        assert!(matches!(
+            app.package_mode,
+            PackageMode::SelectingScript { .. }
+        ));
+
+        // Esc should go back to package list
+        let action = app.handle_esc();
+        assert!(matches!(action, Action::Continue));
+        assert_eq!(app.package_mode, PackageMode::SelectingPackage);
+    }
+
+    // --- handle_enter tests ---
+
+    #[test]
+    fn test_handle_enter_returns_run_action() {
+        let mut app = TestAppBuilder::new()
+            .with_scripts(vec![script("test", "echo test")])
+            .build();
+
+        let action = app.handle_enter();
+        assert!(matches!(action, Action::RunScript { .. }));
+
+        if let Action::RunScript { script_name, .. } = action {
+            assert_eq!(script_name, "test");
+        }
+    }
+
+    #[test]
+    fn test_handle_enter_on_empty_list_returns_continue() {
+        let mut app = TestAppBuilder::new().build();
+
+        let action = app.handle_enter();
+        assert!(matches!(action, Action::Continue));
+    }
+
+    // --- ensure_scroll tests ---
+
+    #[test]
+    fn test_ensure_scroll_adjusts_when_selected_below_offset() {
+        let mut offset = 5;
+        ensure_scroll(&mut offset, 3, 10);
+        assert_eq!(offset, 3);
+    }
+
+    #[test]
+    fn test_ensure_scroll_adjusts_when_selected_above_visible() {
+        let mut offset = 0;
+        ensure_scroll(&mut offset, 15, 10);
+        assert_eq!(offset, 6); // 15 - 10 + 1
+    }
+
+    #[test]
+    fn test_ensure_scroll_no_change_when_in_view() {
+        let mut offset = 5;
+        ensure_scroll(&mut offset, 10, 10);
+        assert_eq!(offset, 5); // 10 is within [5, 15)
+    }
+
+    // --- wrap_index tests ---
+
+    #[test]
+    fn test_wrap_index_normal_increment() {
+        assert_eq!(wrap_index(0, 1, 5), 1);
+        assert_eq!(wrap_index(2, 1, 5), 3);
+    }
+
+    #[test]
+    fn test_wrap_index_wraps_at_end() {
+        assert_eq!(wrap_index(4, 1, 5), 0);
+    }
+
+    #[test]
+    fn test_wrap_index_wraps_at_start() {
+        assert_eq!(wrap_index(0, -1, 5), 4);
+    }
+
+    #[test]
+    fn test_wrap_index_handles_zero_length() {
+        assert_eq!(wrap_index(0, 1, 0), 0);
+        assert_eq!(wrap_index(5, -1, 0), 0);
+    }
+}
+

@@ -1,12 +1,6 @@
 use anyhow::{Context, Result};
+use nr::{app, core, store};
 use std::process;
-
-mod app;
-mod core;
-mod fuzzy;
-mod sort;
-mod store;
-mod ui;
 
 fn main() -> Result<()> {
     // 0. Handle CLI arguments
