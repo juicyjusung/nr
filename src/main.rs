@@ -53,6 +53,12 @@ fn main() -> Result<()> {
     let config_dir = store::config_path::ensure_config_dir();
     let proj_id = store::project_id::project_id(pm_root);
 
+    let project_name = core::package_json::PackageJson::load(&root.nearest_pkg)
+        .and_then(|pkg| pkg.name)
+        .unwrap_or_else(|| "unknown".to_string());
+    let project_path = pm_root.to_string_lossy().to_string();
+    let pm_name = package_manager.to_string();
+
     // 2. Install panic hook so terminal is restored on panic
     install_panic_hook();
 
@@ -65,6 +71,9 @@ fn main() -> Result<()> {
         root.monorepo_root,
         &config_dir,
         proj_id,
+        project_name,
+        project_path,
+        pm_name,
     );
 
     // 4. Event loop

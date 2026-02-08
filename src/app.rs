@@ -45,6 +45,11 @@ pub struct App {
     pub recents: Vec<RecentEntry>,
     pub project_id: String,
 
+    // Header info
+    pub project_name: String,
+    pub project_path: String,
+    pub package_manager_name: String,
+
     // Layout
     visible_height: usize,
 
@@ -69,6 +74,7 @@ pub struct App {
 }
 
 impl App {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         raw_scripts: IndexMap<String, String>,
         workspace_packages: Vec<WorkspacePackage>,
@@ -76,6 +82,9 @@ impl App {
         monorepo_root: Option<PathBuf>,
         config_dir: &std::path::Path,
         project_id: String,
+        project_name: String,
+        project_path: String,
+        package_manager_name: String,
     ) -> Self {
         let has_workspaces = !workspace_packages.is_empty();
 
@@ -112,6 +121,10 @@ impl App {
             favorites: favorites_data,
             recents: recents_data,
             project_id,
+
+            project_name,
+            project_path,
+            package_manager_name,
 
             visible_height: 20,
 
@@ -176,6 +189,7 @@ impl App {
         // Build layout constraints depending on whether we show the tab bar
         let chunks = if self.has_workspaces {
             Layout::vertical([
+                Constraint::Length(1), // header bar
                 Constraint::Length(2), // tabs
                 Constraint::Length(1), // search input
                 Constraint::Min(1),    // main content
@@ -184,6 +198,7 @@ impl App {
             .split(area)
         } else {
             Layout::vertical([
+                Constraint::Length(1), // header bar
                 Constraint::Length(0), // no tabs
                 Constraint::Length(1), // search input
                 Constraint::Min(1),    // main content
@@ -193,7 +208,16 @@ impl App {
         };
 
         // Track actual visible height for scroll calculations
-        self.visible_height = chunks[2].height as usize;
+        self.visible_height = chunks[3].height as usize;
+
+        // Header bar
+        crate::ui::header_bar::render_header_bar(
+            frame,
+            chunks[0],
+            &self.project_name,
+            &self.project_path,
+            &self.package_manager_name,
+        );
 
         // Tabs (only if workspaces exist)
         if self.has_workspaces {
@@ -202,19 +226,19 @@ impl App {
                 Tab::Scripts => 0,
                 Tab::Packages => 1,
             };
-            crate::ui::tabs::render_tabs(frame, chunks[0], &tab_labels, active);
+            crate::ui::tabs::render_tabs(frame, chunks[1], &tab_labels, active);
         }
 
         // Search input
         let current_query = self.current_query();
-        crate::ui::search_input::render_search_input(frame, chunks[1], current_query);
+        crate::ui::search_input::render_search_input(frame, chunks[2], current_query);
 
         // Main content
         match self.active_tab {
             Tab::Scripts => {
                 crate::ui::script_list::render_script_list(
                     frame,
-                    chunks[2],
+                    chunks[3],
                     &self.scripts,
                     &self.filtered_indices,
                     self.selected_index,
@@ -226,7 +250,7 @@ impl App {
                 PackageMode::SelectingPackage => {
                     crate::ui::package_list::render_package_list(
                         frame,
-                        chunks[2],
+                        chunks[3],
                         &self.workspace_packages,
                         &self.pkg_filtered_indices,
                         self.pkg_selected_index,
@@ -236,7 +260,7 @@ impl App {
                 PackageMode::SelectingScript { .. } => {
                     crate::ui::script_list::render_script_list(
                         frame,
-                        chunks[2],
+                        chunks[3],
                         &self.pkg_script_sortable,
                         &self.pkg_script_filtered_indices,
                         self.pkg_script_selected_index,
@@ -248,7 +272,7 @@ impl App {
         }
 
         // Status bar
-        crate::ui::status_bar::render_status_bar(frame, chunks[3]);
+        crate::ui::status_bar::render_status_bar(frame, chunks[4]);
     }
 
     // -- Private helpers --

@@ -1,3 +1,4 @@
+pub mod header_bar;
 pub mod package_list;
 pub mod script_list;
 pub mod search_input;
