@@ -1,0 +1,47 @@
+# Rust build outputs
+/target/
+
+# Environment variables
+.env
+.env*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE & Editors
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+
+# AI/Agent tools - only skills/ are tracked
+.agent/*
+!.agent/skills/
+.claude/*
+!.claude/skills/
+.cursor/*
+!.cursor/skills/
+.serena/
+.worktrees/
+
+# Cache
+.cache/
+*.cache
+
+# Plans & Docs
+docs/plans/
+
+# Personal/Local
+todo.md
+notes.md
+scratch/
+.notes/
+.branches
+.mcp.json
+.temp
+.omc
