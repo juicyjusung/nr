@@ -43,7 +43,6 @@ pub struct App {
     // State
     pub favorites: HashSet<String>,
     pub recents: Vec<RecentEntry>,
-    pub project_id: String,
 
     // Header info
     pub project_name: String,
@@ -80,8 +79,7 @@ impl App {
         workspace_packages: Vec<WorkspacePackage>,
         nearest_pkg: PathBuf,
         monorepo_root: Option<PathBuf>,
-        config_dir: &std::path::Path,
-        project_id: String,
+        project_dir: &std::path::Path,
         project_name: String,
         project_path: String,
         package_manager_name: String,
@@ -92,15 +90,15 @@ impl App {
         let scripts: Vec<SortableScript> = raw_scripts
             .iter()
             .map(|(name, command)| SortableScript {
-                key: format!("{}:root:{}", project_id, name),
+                key: format!("root:{}", name),
                 name: name.clone(),
                 command: command.clone(),
             })
             .collect();
 
-        // Load persisted state
-        let favorites_data = favorites::load_favorites(config_dir);
-        let recents_data = recents::load_recents(config_dir);
+        // Load persisted state from project-scoped directory
+        let favorites_data = favorites::load_favorites(project_dir);
+        let recents_data = recents::load_recents(project_dir);
 
         // Initial sort/filter
         let filtered_indices = sort_scripts(&scripts, &favorites_data, &recents_data, "");
@@ -120,7 +118,6 @@ impl App {
 
             favorites: favorites_data,
             recents: recents_data,
-            project_id,
 
             project_name,
             project_path,
@@ -369,7 +366,7 @@ impl App {
             .scripts
             .iter()
             .map(|(name, command)| SortableScript {
-                key: format!("{}:{}:{}", self.project_id, pkg_name, name),
+                key: format!("{}:{}", pkg_name, name),
                 name: name.clone(),
                 command: command.clone(),
             })

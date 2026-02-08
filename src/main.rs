@@ -15,6 +15,12 @@ fn main() -> Result<()> {
         println!("nr {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
+
+    let wants_reset = args.iter().any(|a| a == "--reset");
+    let wants_reset_favorites = args.iter().any(|a| a == "--reset-favorites");
+    let wants_reset_recents = args.iter().any(|a| a == "--reset-recents");
+    let wants_any_reset = wants_reset || wants_reset_favorites || wants_reset_recents;
+
     if args.iter().any(|a| a == "--help" || a == "-h") {
         println!("nr — TUI-based npm script runner with fuzzy search");
         println!();
@@ -24,8 +30,11 @@ fn main() -> Result<()> {
         println!("browse and execute npm scripts.");
         println!();
         println!("OPTIONS:");
-        println!("  -h, --help     Print this help message");
-        println!("  -V, --version  Print version");
+        println!("  -h, --help            Print this help message");
+        println!("  -V, --version         Print version");
+        println!("  --reset               Clear favorites and recents for current project");
+        println!("  --reset-favorites     Clear favorites for current project");
+        println!("  --reset-recents       Clear recents for current project");
         return Ok(());
     }
 
@@ -34,6 +43,14 @@ fn main() -> Result<()> {
     let root = core::project_root::find_project_root(&cwd)?;
 
     let pm_root = root.monorepo_root.as_ref().unwrap_or(&root.nearest_pkg);
+    let proj_id = store::project_id::project_id(pm_root);
+
+    // Handle reset commands (no TUI needed)
+    if wants_any_reset {
+        let project_dir = store::config_path::get_project_dir(&proj_id);
+        return handle_reset(&project_dir, wants_reset, wants_reset_favorites, wants_reset_recents);
+    }
+
     let package_manager = core::package_manager::detect_package_manager(pm_root);
     let scripts = core::scripts::load_scripts(&root.nearest_pkg);
 
@@ -50,8 +67,7 @@ fn main() -> Result<()> {
         .map(|r| core::workspaces::scan_workspaces(r))
         .unwrap_or_default();
 
-    let config_dir = store::config_path::ensure_config_dir();
-    let proj_id = store::project_id::project_id(pm_root);
+    let project_dir = store::config_path::ensure_project_dir(&proj_id);
 
     let project_name = core::package_json::PackageJson::load(&root.nearest_pkg)
         .and_then(|pkg| pkg.name)
@@ -69,8 +85,7 @@ fn main() -> Result<()> {
         workspace_packages,
         root.nearest_pkg,
         root.monorepo_root,
-        &config_dir,
-        proj_id,
+        &project_dir,
         project_name,
         project_path,
         pm_name,
@@ -99,11 +114,52 @@ fn main() -> Result<()> {
 
     // 6. Execute script (after TUI cleanup)
     if let app::Action::RunScript { script_name, cwd } = action {
-        store::favorites::save_favorites(&config_dir, &app.favorites);
-        store::recents::save_recents(&config_dir, &app.recents);
+        store::favorites::save_favorites(&project_dir, &app.favorites);
+        store::recents::save_recents(&project_dir, &app.recents);
 
         let exit_code = core::runner::run_script(package_manager, &script_name, &cwd);
         process::exit(exit_code);
+    }
+
+    Ok(())
+}
+
+fn handle_reset(
+    project_dir: &std::path::Path,
+    reset_all: bool,
+    reset_favorites: bool,
+    reset_recents: bool,
+) -> Result<()> {
+    let favorites_path = project_dir.join("favorites.json");
+    let recents_path = project_dir.join("recents.json");
+
+    let clear_favorites = reset_all || reset_favorites;
+    let clear_recents = reset_all || reset_recents;
+
+    let mut cleared = Vec::new();
+
+    if clear_favorites {
+        if favorites_path.exists() {
+            std::fs::remove_file(&favorites_path).context("Failed to remove favorites.json")?;
+            cleared.push("favorites");
+        } else {
+            cleared.push("favorites (already empty)");
+        }
+    }
+
+    if clear_recents {
+        if recents_path.exists() {
+            std::fs::remove_file(&recents_path).context("Failed to remove recents.json")?;
+            cleared.push("recents");
+        } else {
+            cleared.push("recents (already empty)");
+        }
+    }
+
+    if cleared.is_empty() {
+        println!("Nothing to reset.");
+    } else {
+        println!("Reset complete: {}", cleared.join(", "));
     }
 
     Ok(())
