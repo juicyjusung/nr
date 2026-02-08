@@ -18,7 +18,12 @@ pub fn run_script(pm: PackageManager, script_name: &str, cwd: &Path) -> i32 {
     match status {
         Ok(s) => s.code().unwrap_or(1),
         Err(e) => {
-            eprintln!("Failed to run '{} {}': {}", pm.command_name(), script_name, e);
+            eprintln!(
+                "Failed to run '{} {}': {}",
+                pm.command_name(),
+                script_name,
+                e
+            );
             1
         }
     }

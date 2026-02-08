@@ -529,11 +529,19 @@ impl App {
     }
 
     fn ensure_visible_scripts(&mut self) {
-        ensure_scroll(&mut self.scroll_offset, self.selected_index, self.visible_height);
+        ensure_scroll(
+            &mut self.scroll_offset,
+            self.selected_index,
+            self.visible_height,
+        );
     }
 
     fn ensure_visible_packages(&mut self) {
-        ensure_scroll(&mut self.pkg_scroll_offset, self.pkg_selected_index, self.visible_height);
+        ensure_scroll(
+            &mut self.pkg_scroll_offset,
+            self.pkg_selected_index,
+            self.visible_height,
+        );
     }
 
     fn ensure_visible_pkg_scripts(&mut self) {

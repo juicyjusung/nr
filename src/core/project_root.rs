@@ -49,8 +49,7 @@ fn is_monorepo_root(dir: &Path) -> bool {
     if dir.join("pnpm-workspace.yaml").is_file() {
         return true;
     }
-    PackageJson::load(dir)
-        .is_some_and(|pkg| pkg.workspaces.is_some())
+    PackageJson::load(dir).is_some_and(|pkg| pkg.workspaces.is_some())
 }
 
 /// Starting from `start_dir`'s parent, walk upward looking for a monorepo root indicator:

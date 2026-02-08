@@ -48,7 +48,10 @@ pub fn render_package_list(
         } else {
             Line::from(vec![
                 Span::raw(" "),
-                Span::styled(format!("{:<width$}", &pkg.name, width = name_width), Style::default()),
+                Span::styled(
+                    format!("{:<width$}", &pkg.name, width = name_width),
+                    Style::default(),
+                ),
                 Span::styled(&pkg.relative_path, Style::default().fg(Color::DarkGray)),
             ])
         };
