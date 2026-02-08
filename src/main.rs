@@ -48,17 +48,34 @@ fn main() -> Result<()> {
     // Handle reset commands (no TUI needed)
     if wants_any_reset {
         let project_dir = store::config_path::get_project_dir(&proj_id);
-        return handle_reset(&project_dir, wants_reset, wants_reset_favorites, wants_reset_recents);
+        return handle_reset(
+            &project_dir,
+            wants_reset,
+            wants_reset_favorites,
+            wants_reset_recents,
+        );
     }
 
     let package_manager = core::package_manager::detect_package_manager(pm_root);
     let scripts = core::scripts::load_scripts(&root.nearest_pkg);
 
     if scripts.is_empty() {
-        anyhow::bail!(
-            "No scripts found in {}/package.json",
+        eprintln!(
+            "❌ No scripts found in {}/package.json",
             root.nearest_pkg.display()
         );
+        eprintln!();
+        eprintln!("💡 To use nr, add scripts to your package.json:");
+        eprintln!("   {{");
+        eprintln!("     \"scripts\": {{");
+        eprintln!("       \"dev\": \"vite\",");
+        eprintln!("       \"build\": \"vite build\",");
+        eprintln!("       \"test\": \"vitest\"");
+        eprintln!("     }}");
+        eprintln!("   }}");
+        eprintln!();
+        eprintln!("📖 Learn more: https://docs.npmjs.com/cli/v10/using-npm/scripts");
+        process::exit(1);
     }
 
     let workspace_packages = root

@@ -18,12 +18,54 @@ pub fn run_script(pm: PackageManager, script_name: &str, cwd: &Path) -> i32 {
     match status {
         Ok(s) => s.code().unwrap_or(1),
         Err(e) => {
+            eprintln!();
             eprintln!(
-                "Failed to run '{} {}': {}",
+                "❌ Failed to run script: '{} {}'",
                 pm.command_name(),
-                script_name,
-                e
+                script_name
             );
+            eprintln!();
+
+            // Check if it's a command not found error
+            if e.kind() == std::io::ErrorKind::NotFound {
+                eprintln!(
+                    "🔍 Package manager '{}' not found in PATH",
+                    pm.command_name()
+                );
+                eprintln!();
+                eprintln!("💡 Install {} to continue:", pm);
+
+                match pm {
+                    PackageManager::Npm => {
+                        eprintln!("   - Download Node.js (includes npm): https://nodejs.org");
+                        eprintln!("   - Or use a version manager: nvm, fnm, volta");
+                    }
+                    PackageManager::Yarn => {
+                        eprintln!("   npm install -g yarn");
+                        eprintln!("   Or: https://yarnpkg.com/getting-started/install");
+                    }
+                    PackageManager::Pnpm => {
+                        eprintln!("   npm install -g pnpm");
+                        eprintln!("   Or: https://pnpm.io/installation");
+                    }
+                    PackageManager::Bun => {
+                        eprintln!("   curl -fsSL https://bun.sh/install | bash");
+                        eprintln!("   Or: https://bun.sh");
+                    }
+                }
+            } else {
+                eprintln!("Error: {}", e);
+                eprintln!();
+                eprintln!("💡 Common issues:");
+                eprintln!("   - Check if the package manager is in your PATH");
+                eprintln!(
+                    "   - Try running the script manually: {} {}",
+                    pm.command_name(),
+                    script_name
+                );
+            }
+
+            eprintln!();
             1
         }
     }

@@ -80,6 +80,14 @@ mod tests {
         let dir = ensure_project_dir("test_ensure_proj");
         assert!(dir.exists());
         // Clean up
-        std::fs::remove_dir_all(dir.parent().unwrap().parent().unwrap().join("projects").join("test_ensure_proj")).ok();
+        std::fs::remove_dir_all(
+            dir.parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .join("projects")
+                .join("test_ensure_proj"),
+        )
+        .ok();
     }
 }
