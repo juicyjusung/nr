@@ -28,6 +28,9 @@ The demo showcases:
 
 - **Fuzzy search** — Find scripts instantly, no need to remember exact names
 - **Favorites & recents** — Starred scripts float to the top; frecency-based sorting learns your habits
+- **Environment variables** — Select `.env` files before execution with configurable flow (Tab key)
+- **Script arguments** — Pass additional arguments with history and cursor editing
+- **Configuration memory** — Remembers your last env/args choices per script
 - **Monorepo support** — Works with npm, yarn, pnpm, and bun workspaces out of the box
 - **Auto-detection** — Picks the right package manager from your lockfile
 - **Fast & lightweight** — Single ~1 MB binary, no runtime dependencies
@@ -78,11 +81,23 @@ That's it. Start typing to search, arrow keys to navigate, enter to run.
 | Key | Action |
 |-----|--------|
 | `↑` `↓` | Navigate scripts |
-| `Enter` | Run selected script |
+| `Enter` | Run selected script immediately |
+| `Tab` | Configure & run (select .env files + add arguments) |
 | `Space` | Toggle favorite |
 | `←` `→` | Switch tabs (Scripts / Packages) |
 | `Esc` | Quit or go back |
+| `Ctrl+C` | Quit anytime (even in modals) |
 | Type | Fuzzy search |
+
+### Configuration Flow (Tab Key)
+
+Press `Tab` on any script to enter the 3-step configuration flow:
+
+1. **Environment Selection**: Choose `.env` files from package and root directories
+2. **Arguments Input**: Add extra arguments with history (use `←` `→` for cursor movement)
+3. **Confirmation**: Review and execute with the full command preview
+
+Your configuration is automatically saved per script and restored next time!
 
 ## Monorepo Support
 

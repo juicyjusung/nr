@@ -55,6 +55,7 @@ fn create_test_app() -> App {
         "test-project".to_string(),
         "/test/project".to_string(),
         "npm".to_string(),
+        nr::core::package_manager::PackageManager::Npm,
     )
 }
 
