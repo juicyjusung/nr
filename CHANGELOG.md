@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/juicyjusung/nr/compare/v0.2.1...v0.2.2) (2026-02-09)
+
+
+### Bug Fixes
+
+* make release creation idempotent for release-please compatibility ([674891f](https://github.com/juicyjusung/nr/commit/674891fc9c445b36e98be8aebd3da3fa3fe51bba))
+
 ## [0.2.1](https://github.com/juicyjusung/nr/compare/v0.2.0...v0.2.1) (2026-02-09)
 
 
