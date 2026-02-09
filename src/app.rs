@@ -231,11 +231,6 @@ impl App {
                 self.start_configure_flow();
                 Action::Continue
             }
-            // Use 'c' key for configure flow when query is empty
-            KeyCode::Char('c') if self.current_query().is_empty() => {
-                self.start_configure_flow();
-                Action::Continue
-            }
             KeyCode::Up => {
                 self.move_selection(-1);
                 Action::Continue
