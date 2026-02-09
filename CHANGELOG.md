@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/juicyjusung/nr/compare/v0.2.0...v0.2.1) (2026-02-09)
+
+
+### Bug Fixes
+
+* remove 'c' key shortcut for configuration entry ([f633e39](https://github.com/juicyjusung/nr/commit/f633e39340c94cf2627e87a701246776d5273e8f))
+* remove 'c' key shortcut for configuration entry ([7fa12b5](https://github.com/juicyjusung/nr/commit/7fa12b5f7c6a311f30be30ac2feec6ddb773297e))
+
 ## [0.2.0](https://github.com/juicyjusung/nr/compare/v0.1.0...v0.2.0) (2026-02-09)
 
 
