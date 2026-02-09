@@ -33,18 +33,25 @@ src/
 │   ├── scripts.rs          # Load scripts from package.json
 │   ├── workspaces.rs       # Glob-based workspace package scanning
 │   ├── runner.rs           # Execute scripts via detected package manager
+│   ├── env_files.rs        # Scan and load .env files (NEW)
 │   └── package_json.rs     # Shared package.json parser
 ├── store/           # Persistence layer (~/.config/nr/)
-│   ├── favorites.rs    # HashSet<String> of starred script keys
-│   ├── recents.rs      # Frecency tracking (14-day halflife, 100 entry cap)
-│   ├── project_id.rs   # SHA-256 hash of project root path
-│   └── config_path.rs  # XDG config directory
+│   ├── favorites.rs        # HashSet<String> of starred script keys
+│   ├── recents.rs          # Frecency tracking (14-day halflife, 100 entry cap)
+│   ├── script_configs.rs   # Per-script env/args configurations (NEW)
+│   ├── args_history.rs     # Global args history (max 20 entries) (NEW)
+│   ├── global_env.rs       # Global env file preferences (NEW)
+│   ├── project_id.rs       # SHA-256 hash of project root path
+│   └── config_path.rs      # XDG config directory
 └── ui/              # Pure rendering functions (no state)
-    ├── script_list.rs   # Scrollable list with ❯ cursor and ★ favorites
-    ├── package_list.rs  # Workspace package list
-    ├── search_input.rs  # Search input with block cursor
-    ├── status_bar.rs    # Keyboard shortcut hints
-    └── tabs.rs          # Scripts / Packages tab bar
+    ├── script_list.rs       # Scrollable list with ❯ cursor and ★ favorites
+    ├── package_list.rs      # Workspace package list
+    ├── search_input.rs      # Search input with block cursor
+    ├── status_bar.rs        # Keyboard shortcut hints
+    ├── tabs.rs              # Scripts / Packages tab bar
+    ├── env_selector.rs      # .env file selection modal (NEW)
+    ├── args_input.rs        # Arguments input with cursor editing (NEW)
+    └── execution_confirm.rs # Execution preview modal (NEW)
 ```
 
 ### Key Patterns
@@ -53,15 +60,23 @@ src/
 - **Pure UI functions**: All `ui/` modules are stateless `render_*` functions taking `&Frame`
 - **Stateless core**: `core/` modules are pure functions, no shared state
 - **State machine**: `App` struct owns all mutable state, `handle_key()` returns `Action` enum
+- **Modal state management**: `AppMode` enum (Normal, ConfigureEnv, ConfigureArgs, ConfirmExecution)
 - **Two-phase discovery**: Find nearest `package.json`, then search upward for monorepo root
 - **Scroll management**: Viewport offset tracking via `ensure_scroll()` helper
+- **Cursor position tracking**: Character-level cursor for text input with Left/Right/Home/End support
 
 ### Data Flow
 
 1. `main.rs`: discover project root -> detect package manager -> load scripts -> scan workspaces
-2. Load persisted favorites/recents from `~/.config/nr/` keyed by SHA-256 project ID
+2. Load persisted favorites/recents/configs from `~/.config/nr/{project_id}/` keyed by SHA-256 project ID
 3. Enter TUI event loop (`App::handle_key` -> `Action`)
 4. On `Action::RunScript`: exit TUI, save state, exec script via `process::exit()`
+5. Configuration flow (Tab key):
+   - Scan .env files from package + root directories
+   - Restore previous env/args from `script_configs.json`
+   - User selects env files -> inputs args -> confirms
+   - Save configuration per script key
+   - Execute with injected env vars and additional arguments
 
 ### Sorting Algorithm (sort.rs)
 
@@ -72,6 +87,17 @@ src/
 ### Script Key Format
 
 `{project_id}:{scope}:{name}` where scope is `root` or package name.
+
+### Configuration Storage
+
+```
+~/.config/nr/{project_id}/
+├── favorites.json         # Starred scripts
+├── recents.json          # Frecency-tracked execution history
+├── script_configs.json   # Per-script env/args configurations
+├── args_history.json     # Global args history (max 20)
+└── global_env.json       # Global env file preferences
+```
 
 ## Dependencies
 

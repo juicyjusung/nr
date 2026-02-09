@@ -64,3 +64,159 @@ impl PackageJson {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_load_parses_valid_json() {
+        let temp = TempDir::new().unwrap();
+        fs::write(
+            temp.path().join("package.json"),
+            r#"{
+                "name": "test-package",
+                "scripts": {
+                    "test": "echo test",
+                    "build": "echo build"
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let pkg = PackageJson::load(temp.path()).unwrap();
+        assert_eq!(pkg.name, Some("test-package".to_string()));
+
+        let scripts = pkg.scripts();
+        assert_eq!(scripts.len(), 2);
+        assert_eq!(scripts.get("test"), Some(&"echo test".to_string()));
+        assert_eq!(scripts.get("build"), Some(&"echo build".to_string()));
+    }
+
+    #[test]
+    fn test_load_returns_none_when_file_missing() {
+        let temp = TempDir::new().unwrap();
+        let pkg = PackageJson::load(temp.path());
+        assert!(pkg.is_none());
+    }
+
+    #[test]
+    fn test_load_returns_none_when_invalid_json() {
+        let temp = TempDir::new().unwrap();
+        fs::write(temp.path().join("package.json"), "invalid json").unwrap();
+
+        let pkg = PackageJson::load(temp.path());
+        assert!(pkg.is_none());
+    }
+
+    #[test]
+    fn test_scripts_returns_empty_when_none() {
+        let pkg = PackageJson {
+            name: Some("test".to_string()),
+            scripts: None,
+            workspaces: None,
+            package_manager: None,
+        };
+
+        let scripts = pkg.scripts();
+        assert!(scripts.is_empty());
+    }
+
+    #[test]
+    fn test_scripts_filters_non_string_values() {
+        let temp = TempDir::new().unwrap();
+        fs::write(
+            temp.path().join("package.json"),
+            r#"{
+                "scripts": {
+                    "test": "echo test",
+                    "invalid": 123,
+                    "build": "echo build",
+                    "also-invalid": true
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let pkg = PackageJson::load(temp.path()).unwrap();
+        let scripts = pkg.scripts();
+
+        // Should only include string values
+        assert_eq!(scripts.len(), 2);
+        assert!(scripts.contains_key("test"));
+        assert!(scripts.contains_key("build"));
+        assert!(!scripts.contains_key("invalid"));
+        assert!(!scripts.contains_key("also-invalid"));
+    }
+
+    #[test]
+    fn test_workspace_patterns_array_format() {
+        let temp = TempDir::new().unwrap();
+        fs::write(
+            temp.path().join("package.json"),
+            r#"{
+                "workspaces": ["packages/*", "apps/*"]
+            }"#,
+        )
+        .unwrap();
+
+        let pkg = PackageJson::load(temp.path()).unwrap();
+        let patterns = pkg.workspace_patterns();
+
+        assert_eq!(patterns.len(), 2);
+        assert_eq!(patterns[0], "packages/*");
+        assert_eq!(patterns[1], "apps/*");
+    }
+
+    #[test]
+    fn test_workspace_patterns_object_format() {
+        let temp = TempDir::new().unwrap();
+        fs::write(
+            temp.path().join("package.json"),
+            r#"{
+                "workspaces": {
+                    "packages": ["packages/*", "tools/*"]
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let pkg = PackageJson::load(temp.path()).unwrap();
+        let patterns = pkg.workspace_patterns();
+
+        assert_eq!(patterns.len(), 2);
+        assert_eq!(patterns[0], "packages/*");
+        assert_eq!(patterns[1], "tools/*");
+    }
+
+    #[test]
+    fn test_workspace_patterns_returns_empty_when_none() {
+        let pkg = PackageJson {
+            name: Some("test".to_string()),
+            scripts: None,
+            workspaces: None,
+            package_manager: None,
+        };
+
+        let patterns = pkg.workspace_patterns();
+        assert!(patterns.is_empty());
+    }
+
+    #[test]
+    fn test_workspace_patterns_handles_invalid_format() {
+        let temp = TempDir::new().unwrap();
+        fs::write(
+            temp.path().join("package.json"),
+            r#"{
+                "workspaces": "invalid"
+            }"#,
+        )
+        .unwrap();
+
+        let pkg = PackageJson::load(temp.path()).unwrap();
+        let patterns = pkg.workspace_patterns();
+        assert!(patterns.is_empty());
+    }
+}

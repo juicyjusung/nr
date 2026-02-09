@@ -13,7 +13,9 @@ pub struct ProjectRoot {
 /// Errors that can occur during project root discovery.
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectRootError {
-    #[error("No package.json found in any parent directory")]
+    #[error(
+        "No package.json found in any parent directory.\n\n💡 To use nr, you need a Node.js project with package.json.\n\nCreate one by running:\n   npm init -y\n   # or\n   yarn init -y\n   # or\n   pnpm init\n   # or\n   bun init\n\nThen add scripts to your package.json and run 'nr' again."
+    )]
     NotFound,
 }
 

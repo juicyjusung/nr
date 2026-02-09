@@ -36,6 +36,12 @@ Thumbs.db
 # Plans & Docs
 docs/plans/
 
+# VHS recordings (tape files generate the gifs, keep both in git)
+# *.gif (we want to commit demo.gif)
+*.cast
+*.mp4
+*.webm
+
 # Personal/Local
 todo.md
 notes.md
