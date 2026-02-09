@@ -6,12 +6,12 @@
   "architecture": {
     "64bit": {
       "url": "https://github.com/juicyjusung/nr/releases/download/v0.2.0/nr-v0.2.0-x86_64-pc-windows-msvc.zip",
-      "hash": "f48f7ca1c5c4c2dc82afda67a40e3df1449306c15920b580d140d151a5918e4a",
+      "hash": "bb3891ee91cd4bff6f55a2c79906b41544f52b8388e18854352ca6b6259dbfb7",
       "bin": "nr-v0.2.0-x86_64-pc-windows-msvc\\nr.exe"
     },
     "arm64": {
       "url": "https://github.com/juicyjusung/nr/releases/download/v0.2.0/nr-v0.2.0-aarch64-pc-windows-msvc.zip",
-      "hash": "230be3cb107a556a3fbb11d7d571777d2df1acb4eeafa83ae0d30076114fc71f",
+      "hash": "92fc2fd291729228b027250788d82f5b7d171788d564f828306b6db1f94c12f2",
       "bin": "nr-v0.2.0-aarch64-pc-windows-msvc\\nr.exe"
     }
   }
