@@ -1,18 +1,18 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "TUI-based npm script runner with fuzzy search",
   "homepage": "https://github.com/juicyjusung/nr",
   "license": "MIT",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/juicyjusung/nr/releases/download/v0.1.0/nr-v0.1.0-x86_64-pc-windows-msvc.zip",
-      "hash": "d062581675a72c5bee4b72979e006f1c17dc9fdff25cad80247fd5a702c0ecec",
-      "bin": "nr-v0.1.0-x86_64-pc-windows-msvc\\nr.exe"
+      "url": "https://github.com/juicyjusung/nr/releases/download/v0.2.0/nr-v0.2.0-x86_64-pc-windows-msvc.zip",
+      "hash": "f48f7ca1c5c4c2dc82afda67a40e3df1449306c15920b580d140d151a5918e4a",
+      "bin": "nr-v0.2.0-x86_64-pc-windows-msvc\\nr.exe"
     },
     "arm64": {
-      "url": "https://github.com/juicyjusung/nr/releases/download/v0.1.0/nr-v0.1.0-aarch64-pc-windows-msvc.zip",
-      "hash": "a7e99ce39c6ba3af56605448b83ae6f445305b2cfd650cdc5580217795bcbdbf",
-      "bin": "nr-v0.1.0-aarch64-pc-windows-msvc\\nr.exe"
+      "url": "https://github.com/juicyjusung/nr/releases/download/v0.2.0/nr-v0.2.0-aarch64-pc-windows-msvc.zip",
+      "hash": "230be3cb107a556a3fbb11d7d571777d2df1acb4eeafa83ae0d30076114fc71f",
+      "bin": "nr-v0.2.0-aarch64-pc-windows-msvc\\nr.exe"
     }
   }
 }
