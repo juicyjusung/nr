@@ -5,17 +5,9 @@ use std::path::Path;
 
 const MAX_HISTORY_ENTRIES: usize = 20;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ArgsHistory {
     pub entries: Vec<String>,
-}
-
-impl Default for ArgsHistory {
-    fn default() -> Self {
-        Self {
-            entries: Vec::new(),
-        }
-    }
 }
 
 impl ArgsHistory {
@@ -69,8 +61,12 @@ pub fn load_args_history(config_dir: &Path) -> Result<ArgsHistory> {
 
 /// Saves args history to disk.
 pub fn save_args_history(config_dir: &Path, history: &ArgsHistory) -> Result<()> {
-    fs::create_dir_all(config_dir)
-        .with_context(|| format!("Failed to create config directory: {}", config_dir.display()))?;
+    fs::create_dir_all(config_dir).with_context(|| {
+        format!(
+            "Failed to create config directory: {}",
+            config_dir.display()
+        )
+    })?;
 
     let path = config_dir.join("args_history.json");
 

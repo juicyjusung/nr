@@ -1,10 +1,10 @@
 use crate::core::env_files::{EnvFileList, EnvScope};
 use ratatui::{
+    Frame,
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
-    Frame,
 };
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -42,8 +42,8 @@ pub fn render_env_selector(
 
     // Split modal into content + status bar
     let chunks = Layout::vertical([
-        Constraint::Min(1),      // Content
-        Constraint::Length(1),   // Status bar
+        Constraint::Min(1),    // Content
+        Constraint::Length(1), // Status bar
     ])
     .split(modal_area.inner(ratatui::layout::Margin {
         horizontal: 1,
@@ -68,7 +68,9 @@ pub fn render_env_selector(
         items.push(
             ListItem::new(Line::from(Span::styled(
                 scope_display,
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
             )))
             .style(Style::default()),
         );
@@ -81,7 +83,9 @@ pub fn render_env_selector(
     // Root section
     if !env_list.root_files.is_empty() {
         if !items.is_empty() {
-            items.push(ListItem::new(Line::from("─────────────────────────────────")));
+            items.push(ListItem::new(Line::from(
+                "─────────────────────────────────",
+            )));
         }
 
         let scope_display = if let Some(first) = env_list.root_files.first() {
@@ -96,7 +100,9 @@ pub fn render_env_selector(
         items.push(
             ListItem::new(Line::from(Span::styled(
                 scope_display,
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
             )))
             .style(Style::default()),
         );
@@ -131,7 +137,10 @@ pub fn render_env_selector(
             String::new()
         };
 
-        let line_text = format!("{}{} {}{}", cursor, checkbox, env_file.display_name, path_hint);
+        let line_text = format!(
+            "{}{} {}{}",
+            cursor, checkbox, env_file.display_name, path_hint
+        );
 
         let style = if is_selected {
             Style::default()

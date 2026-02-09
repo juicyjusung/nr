@@ -54,7 +54,8 @@ pub fn scan_env_files(cwd: &Path, monorepo_root: &Option<PathBuf>) -> EnvFileLis
     }
 
     // Sort package files alphabetically
-    list.package_files.sort_by(|a, b| a.display_name.cmp(&b.display_name));
+    list.package_files
+        .sort_by(|a, b| a.display_name.cmp(&b.display_name));
 
     // Scan monorepo root if it exists and is different from package dir
     if let Some(root) = monorepo_root {
@@ -74,7 +75,8 @@ pub fn scan_env_files(cwd: &Path, monorepo_root: &Option<PathBuf>) -> EnvFileLis
             }
 
             // Sort root files alphabetically
-            list.root_files.sort_by(|a, b| a.display_name.cmp(&b.display_name));
+            list.root_files
+                .sort_by(|a, b| a.display_name.cmp(&b.display_name));
         }
     }
 

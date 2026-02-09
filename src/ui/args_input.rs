@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
-    Frame,
 };
 
 pub fn render_args_input(
@@ -39,10 +39,10 @@ pub fn render_args_input(
 
     // Split modal into: input field + examples + history list + status bar
     let chunks = Layout::vertical([
-        Constraint::Length(3),   // Input field
-        Constraint::Length(2),   // Examples
-        Constraint::Min(1),      // History list
-        Constraint::Length(1),   // Status bar
+        Constraint::Length(3), // Input field
+        Constraint::Length(2), // Examples
+        Constraint::Min(1),    // History list
+        Constraint::Length(1), // Status bar
     ])
     .split(modal_area.inner(ratatui::layout::Margin {
         horizontal: 1,
@@ -51,32 +51,40 @@ pub fn render_args_input(
 
     // Render input field with cursor at position
     let input_text = if input.is_empty() {
-        vec![Span::styled("█", Style::default().bg(Color::White).fg(Color::Black))]
+        vec![Span::styled(
+            "█",
+            Style::default().bg(Color::White).fg(Color::Black),
+        )]
     } else {
         let mut spans = Vec::new();
         let chars: Vec<char> = input.chars().collect();
-        
+
         // Characters before cursor
         if cursor_pos > 0 {
             spans.push(Span::raw(chars[..cursor_pos].iter().collect::<String>()));
         }
-        
+
         // Cursor (block character at position)
         if cursor_pos < chars.len() {
             spans.push(Span::styled(
                 chars[cursor_pos].to_string(),
                 Style::default().bg(Color::White).fg(Color::Black),
             ));
-            
+
             // Characters after cursor
             if cursor_pos + 1 < chars.len() {
-                spans.push(Span::raw(chars[cursor_pos + 1..].iter().collect::<String>()));
+                spans.push(Span::raw(
+                    chars[cursor_pos + 1..].iter().collect::<String>(),
+                ));
             }
         } else {
             // Cursor at end
-            spans.push(Span::styled("█", Style::default().bg(Color::White).fg(Color::Black)));
+            spans.push(Span::styled(
+                "█",
+                Style::default().bg(Color::White).fg(Color::Black),
+            ));
         }
-        
+
         spans
     };
 
@@ -90,27 +98,23 @@ pub fn render_args_input(
     frame.render_widget(input_widget, chunks[0]);
 
     // Render examples
-    let examples = Paragraph::new(vec![
-        Line::from(vec![
-            Span::styled("Examples: ", Style::default().fg(Color::DarkGray)),
-            Span::styled("--port 3000", Style::default().fg(Color::Green)),
-            Span::raw("  "),
-            Span::styled("--watch", Style::default().fg(Color::Green)),
-            Span::raw("  "),
-            Span::styled("--env production", Style::default().fg(Color::Green)),
-        ]),
-    ])
+    let examples = Paragraph::new(vec![Line::from(vec![
+        Span::styled("Examples: ", Style::default().fg(Color::DarkGray)),
+        Span::styled("--port 3000", Style::default().fg(Color::Green)),
+        Span::raw("  "),
+        Span::styled("--watch", Style::default().fg(Color::Green)),
+        Span::raw("  "),
+        Span::styled("--env production", Style::default().fg(Color::Green)),
+    ])])
     .style(Style::default());
     frame.render_widget(examples, chunks[1]);
 
     // Render history list (show up to 5 most recent)
     if !history.is_empty() {
-        let mut history_items = vec![
-            ListItem::new(Line::from(Span::styled(
-                "Recent (↑↓):",
-                Style::default().fg(Color::Cyan),
-            )))
-        ];
+        let mut history_items = vec![ListItem::new(Line::from(Span::styled(
+            "Recent (↑↓):",
+            Style::default().fg(Color::Cyan),
+        )))];
 
         for (idx, entry) in history.iter().take(5).enumerate() {
             let is_selected = history_index == Some(idx);

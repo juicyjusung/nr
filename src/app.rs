@@ -1,4 +1,4 @@
-use crate::core::env_files::{scan_env_files, EnvFile, EnvFileList};
+use crate::core::env_files::{EnvFile, EnvFileList, scan_env_files};
 use crate::core::workspaces::WorkspacePackage;
 use crate::fuzzy::fuzzy_filter;
 use crate::sort::{SortableScript, sort_scripts};
@@ -41,8 +41,8 @@ pub struct ExecutionConfig {
 
 pub enum Action {
     Continue,
-    RunScript { 
-        script_name: String, 
+    RunScript {
+        script_name: String,
         cwd: PathBuf,
         env_files: Vec<PathBuf>,
         args: String,
@@ -142,8 +142,10 @@ impl App {
         // Load persisted state from project-scoped directory
         let favorites_data = favorites::load_favorites(project_dir);
         let recents_data = recents::load_recents(project_dir);
-        let script_configs_data = script_configs::load_script_configs(project_dir).unwrap_or_default();
-        let global_env_data = crate::store::global_env::load_global_env_config(project_dir).unwrap_or_default();
+        let script_configs_data =
+            script_configs::load_script_configs(project_dir).unwrap_or_default();
+        let global_env_data =
+            crate::store::global_env::load_global_env_config(project_dir).unwrap_or_default();
         let args_history_data = args_history::load_args_history(project_dir).unwrap_or_default();
 
         // Initial sort/filter
@@ -391,10 +393,10 @@ impl App {
                 } else {
                     vec![]
                 };
-                
+
                 let script_name = self.get_current_script_name();
                 let cwd = self.get_current_cwd();
-                
+
                 crate::ui::execution_confirm::render_execution_confirm(
                     frame,
                     area,
@@ -489,8 +491,8 @@ impl App {
                             .map(|r| r.join(&pkg.relative_path))
                             .unwrap_or_else(|| self.nearest_pkg.clone());
 
-                        Action::RunScript { 
-                            script_name, 
+                        Action::RunScript {
+                            script_name,
                             cwd,
                             env_files: vec![],
                             args: String::new(),
@@ -728,23 +730,27 @@ impl App {
     fn start_configure_flow(&mut self) {
         // Get current script key
         let script_key = self.get_current_script_key();
-        
+
         // Restore script-specific args (if exists)
         if let Some(config) = self.script_configs.get(&script_key) {
             self.execution_config.args = config.args.clone();
         } else {
             self.execution_config = ExecutionConfig::default();
         }
-        
+
         // Scan .env files
         let cwd = self.get_current_cwd();
         self.env_files_list = Some(scan_env_files(&cwd, &self.monorepo_root));
-        
+
         // Pre-select globally last used env files
         self.env_selected_files = if let Some(ref env_list) = self.env_files_list {
             env_list
                 .all_files()
-                .filter(|f| self.global_env_config.last_env_files.contains(&f.display_name))
+                .filter(|f| {
+                    self.global_env_config
+                        .last_env_files
+                        .contains(&f.display_name)
+                })
                 .map(|f| f.path.clone())
                 .collect()
         } else {
@@ -752,14 +758,14 @@ impl App {
         };
         self.env_selected_index = 0;
         self.env_scroll_offset = 0;
-        
+
         // Enter env selection mode
         self.mode = AppMode::ConfigureEnv;
     }
 
     fn get_current_script_key(&self) -> String {
         let project_id = crate::store::project_id::project_id(&self.config_dir);
-        
+
         match self.active_tab {
             Tab::Scripts => {
                 if let Some(&script_idx) = self.filtered_indices.get(self.selected_index) {
@@ -771,7 +777,10 @@ impl App {
             }
             Tab::Packages => match self.package_mode {
                 PackageMode::SelectingScript { package_index: _ } => {
-                    if let Some(&script_idx) = self.pkg_script_filtered_indices.get(self.pkg_script_selected_index) {
+                    if let Some(&script_idx) = self
+                        .pkg_script_filtered_indices
+                        .get(self.pkg_script_selected_index)
+                    {
                         let script = &self.pkg_script_sortable[script_idx];
                         format!("{}:{}", project_id, script.key)
                     } else {
@@ -963,7 +972,7 @@ impl App {
                 let script_key = self.get_current_script_key();
                 let script_name = self.get_current_script_name();
                 let cwd = self.get_current_cwd();
-                
+
                 // Save script-specific args
                 self.script_configs.insert(
                     script_key.clone(),
@@ -973,7 +982,7 @@ impl App {
                     },
                 );
                 let _ = script_configs::save_script_configs(&self.config_dir, &self.script_configs);
-                
+
                 // Save globally last used env files
                 if let Some(ref env_list) = self.env_files_list {
                     self.global_env_config.last_env_files = env_list
@@ -981,19 +990,23 @@ impl App {
                         .filter(|f| self.env_selected_files.contains(&f.path))
                         .map(|f| f.display_name.clone())
                         .collect();
-                    let _ = crate::store::global_env::save_global_env_config(&self.config_dir, &self.global_env_config);
+                    let _ = crate::store::global_env::save_global_env_config(
+                        &self.config_dir,
+                        &self.global_env_config,
+                    );
                 }
-                
+
                 // Save args to history
                 if !self.execution_config.args.is_empty() {
-                    self.args_history.add_entry(self.execution_config.args.clone());
+                    self.args_history
+                        .add_entry(self.execution_config.args.clone());
                     let _ = args_history::save_args_history(&self.config_dir, &self.args_history);
                 }
-                
+
                 // Record execution in recents
                 let execution_key = script_key.split(':').skip(1).collect::<Vec<_>>().join(":");
                 recents::record_execution(&mut self.recents, &execution_key);
-                
+
                 // Build env file paths in merge order (root → package, so package overrides root)
                 let env_file_paths: Vec<PathBuf> = if let Some(ref env_list) = self.env_files_list {
                     env_list
@@ -1004,10 +1017,10 @@ impl App {
                 } else {
                     vec![]
                 };
-                
+
                 // Reset mode
                 self.mode = AppMode::Normal;
-                
+
                 Action::RunScript {
                     script_name,
                     cwd,
@@ -1030,7 +1043,10 @@ impl App {
             }
             Tab::Packages => match self.package_mode {
                 PackageMode::SelectingScript { .. } => {
-                    if let Some(&script_idx) = self.pkg_script_filtered_indices.get(self.pkg_script_selected_index) {
+                    if let Some(&script_idx) = self
+                        .pkg_script_filtered_indices
+                        .get(self.pkg_script_selected_index)
+                    {
                         self.pkg_script_sortable[script_idx].name.clone()
                     } else {
                         String::new()
@@ -1126,7 +1142,7 @@ mod tests {
                 pkg_script_scroll_offset: 0,
                 pkg_script_filtered_indices: Vec::new(),
                 pkg_script_sortable: Vec::new(),
-                
+
                 // NEW: Config flow fields (test defaults)
                 mode: AppMode::Normal,
                 execution_config: ExecutionConfig::default(),
@@ -1135,13 +1151,13 @@ mod tests {
                 args_history: ArgsHistory::new(),
                 config_dir: PathBuf::from("/test/.config/nr"),
                 package_manager: crate::core::package_manager::PackageManager::Npm,
-                
+
                 // NEW: Env selection UI state (test defaults)
                 env_files_list: None,
                 env_selected_index: 0,
                 env_scroll_offset: 0,
                 env_selected_files: HashSet::new(),
-                
+
                 // NEW: Args input UI state (test defaults)
                 args_input: String::new(),
                 args_cursor_pos: 0,
@@ -1252,10 +1268,7 @@ mod tests {
     #[test]
     fn test_toggle_fav_updates_filtered_indices() {
         let mut app = TestAppBuilder::new()
-            .with_scripts(vec![
-                script("aaa", "echo aaa"),
-                script("zzz", "echo zzz"),
-            ])
+            .with_scripts(vec![script("aaa", "echo aaa"), script("zzz", "echo zzz")])
             .build();
 
         // Initially alphabetical order: aaa, zzz
@@ -1525,4 +1538,3 @@ mod tests {
         assert_eq!(wrap_index(5, -1, 0), 0);
     }
 }
-

@@ -29,13 +29,17 @@ pub fn load_global_env_config(config_dir: &Path) -> Result<GlobalEnvConfig> {
 
 /// Saves global env configuration to disk.
 pub fn save_global_env_config(config_dir: &Path, config: &GlobalEnvConfig) -> Result<()> {
-    fs::create_dir_all(config_dir)
-        .with_context(|| format!("Failed to create config directory: {}", config_dir.display()))?;
+    fs::create_dir_all(config_dir).with_context(|| {
+        format!(
+            "Failed to create config directory: {}",
+            config_dir.display()
+        )
+    })?;
 
     let path = config_dir.join("global_env.json");
 
-    let content = serde_json::to_string_pretty(config)
-        .context("Failed to serialize global env config")?;
+    let content =
+        serde_json::to_string_pretty(config).context("Failed to serialize global env config")?;
 
     fs::write(&path, content)
         .with_context(|| format!("Failed to write global env config to {}", path.display()))?;

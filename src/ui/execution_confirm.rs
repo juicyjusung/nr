@@ -1,10 +1,10 @@
 use crate::core::package_manager::PackageManager;
 use ratatui::{
+    Frame,
     layout::{Constraint, Layout, Rect},
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
-    Frame,
 };
 use std::path::Path;
 
@@ -42,8 +42,8 @@ pub fn render_execution_confirm(
 
     // Split modal into content + status bar
     let chunks = Layout::vertical([
-        Constraint::Min(1),      // Content
-        Constraint::Length(1),   // Status bar
+        Constraint::Min(1),    // Content
+        Constraint::Length(1), // Status bar
     ])
     .split(modal_area.inner(ratatui::layout::Margin {
         horizontal: 1,
@@ -61,28 +61,24 @@ pub fn render_execution_confirm(
         format!("$ {} {} {}", pm.command_name(), cmd_args.join(" "), args)
     };
 
-    content_items.push(
-        ListItem::new(Line::from(Span::styled(
-            cmd_text,
-            Style::default().fg(Color::Green).bold(),
-        )))
-    );
+    content_items.push(ListItem::new(Line::from(Span::styled(
+        cmd_text,
+        Style::default().fg(Color::Green).bold(),
+    ))));
 
     content_items.push(ListItem::new(Line::from("")));
 
     // Environment files
     if !env_files.is_empty() {
-        content_items.push(
-            ListItem::new(Line::from(Span::styled(
-                "Env:",
-                Style::default().fg(Color::Cyan),
-            )))
-        );
+        content_items.push(ListItem::new(Line::from(Span::styled(
+            "Env:",
+            Style::default().fg(Color::Cyan),
+        ))));
 
         for env_file in env_files {
             content_items.push(
                 ListItem::new(Line::from(format!("  • {}", env_file)))
-                    .style(Style::default().fg(Color::DarkGray))
+                    .style(Style::default().fg(Color::DarkGray)),
             );
         }
 
@@ -95,14 +91,14 @@ pub fn render_execution_confirm(
             Span::styled("CWD: ", Style::default().fg(Color::Cyan)),
             Span::raw(cwd.display().to_string()),
         ]))
-        .style(Style::default().fg(Color::DarkGray))
+        .style(Style::default().fg(Color::DarkGray)),
     );
 
     let content_list = List::new(content_items);
     frame.render_widget(content_list, chunks[0]);
 
     // Status bar
-    let status = Paragraph::new("Enter: Execute  Esc: Cancel")
-        .style(Style::default().fg(Color::DarkGray));
+    let status =
+        Paragraph::new("Enter: Execute  Esc: Cancel").style(Style::default().fg(Color::DarkGray));
     frame.render_widget(status, chunks[1]);
 }

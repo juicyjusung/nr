@@ -34,13 +34,17 @@ pub fn load_script_configs(config_dir: &Path) -> Result<ScriptConfigs> {
 
 /// Saves script configurations to disk.
 pub fn save_script_configs(config_dir: &Path, configs: &ScriptConfigs) -> Result<()> {
-    fs::create_dir_all(config_dir)
-        .with_context(|| format!("Failed to create config directory: {}", config_dir.display()))?;
+    fs::create_dir_all(config_dir).with_context(|| {
+        format!(
+            "Failed to create config directory: {}",
+            config_dir.display()
+        )
+    })?;
 
     let path = config_dir.join("script_configs.json");
 
-    let content = serde_json::to_string_pretty(configs)
-        .context("Failed to serialize script configs")?;
+    let content =
+        serde_json::to_string_pretty(configs).context("Failed to serialize script configs")?;
 
     fs::write(&path, content)
         .with_context(|| format!("Failed to write script configs to {}", path.display()))?;

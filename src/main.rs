@@ -14,7 +14,8 @@ fn main() -> Result<()> {
     let wants_reset_favorites = args.iter().any(|a| a == "--reset-favorites");
     let wants_reset_recents = args.iter().any(|a| a == "--reset-recents");
     let wants_reset_configs = args.iter().any(|a| a == "--reset-configs");
-    let wants_any_reset = wants_reset || wants_reset_favorites || wants_reset_recents || wants_reset_configs;
+    let wants_any_reset =
+        wants_reset || wants_reset_favorites || wants_reset_recents || wants_reset_configs;
 
     if args.iter().any(|a| a == "--help" || a == "-h") {
         println!("nr — TUI-based npm script runner with fuzzy search");
@@ -127,7 +128,13 @@ fn main() -> Result<()> {
     ratatui::restore();
 
     // 6. Execute script (after TUI cleanup)
-    if let app::Action::RunScript { script_name, cwd, env_files, args } = action {
+    if let app::Action::RunScript {
+        script_name,
+        cwd,
+        env_files,
+        args,
+    } = action
+    {
         store::favorites::save_favorites(&project_dir, &app.favorites);
         store::recents::save_recents(&project_dir, &app.recents);
 
@@ -137,9 +144,15 @@ fn main() -> Result<()> {
         } else {
             // Load and merge env files
             let env_vars = core::env_files::load_env_files(&env_files).unwrap_or_default();
-            core::runner::run_script_with_config(package_manager, &script_name, &cwd, env_vars, &args)
+            core::runner::run_script_with_config(
+                package_manager,
+                &script_name,
+                &cwd,
+                env_vars,
+                &args,
+            )
         };
-        
+
         process::exit(exit_code);
     }
 
@@ -184,14 +197,16 @@ fn handle_reset(
 
     if clear_configs {
         if script_configs_path.exists() {
-            std::fs::remove_file(&script_configs_path).context("Failed to remove script_configs.json")?;
+            std::fs::remove_file(&script_configs_path)
+                .context("Failed to remove script_configs.json")?;
             cleared.push("script configs");
         } else {
             cleared.push("script configs (already empty)");
         }
-        
+
         if args_history_path.exists() {
-            std::fs::remove_file(&args_history_path).context("Failed to remove args_history.json")?;
+            std::fs::remove_file(&args_history_path)
+                .context("Failed to remove args_history.json")?;
             cleared.push("args history");
         } else {
             cleared.push("args history (already empty)");

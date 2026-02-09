@@ -1,6 +1,6 @@
 use nr::core::env_files::scan_env_files;
-use nr::store::global_env::{load_global_env_config, save_global_env_config, GlobalEnvConfig};
-use nr::store::script_configs::{load_script_configs, save_script_configs, ScriptConfig};
+use nr::store::global_env::{GlobalEnvConfig, load_global_env_config, save_global_env_config};
+use nr::store::script_configs::{ScriptConfig, load_script_configs, save_script_configs};
 use std::collections::HashMap;
 use std::fs;
 use std::time::SystemTime;
@@ -52,10 +52,7 @@ fn test_script_args_persist_independently() {
 
     // Load and verify
     let loaded = load_script_configs(config_dir).unwrap();
-    assert_eq!(
-        loaded.get("proj123:root:test").unwrap().args,
-        "--watch"
-    );
+    assert_eq!(loaded.get("proj123:root:test").unwrap().args, "--watch");
     assert_eq!(
         loaded.get("proj123:root:build").unwrap().args,
         "--production"
@@ -161,11 +158,11 @@ fn test_env_file_merge_order() {
 
     // Root should come first, package second
     assert_eq!(merge_order.len(), 2);
-    
+
     // Verify order by checking parent directory
     let first_parent = merge_order[0].path.parent().unwrap();
     let second_parent = merge_order[1].path.parent().unwrap();
-    
+
     // First should be from root_dir, second from package_dir
     assert_eq!(first_parent, root_dir);
     assert_eq!(second_parent, package_dir);
@@ -221,10 +218,7 @@ fn test_multiple_scripts_share_global_env() {
         loaded_configs.get("proj:root:build").unwrap().args,
         "--production"
     );
-    assert_eq!(
-        loaded_configs.get("proj:root:dev").unwrap().args,
-        "--hot"
-    );
+    assert_eq!(loaded_configs.get("proj:root:dev").unwrap().args, "--hot");
 }
 
 /// Test that updating global env affects all future sessions
