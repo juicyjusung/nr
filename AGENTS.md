@@ -23,7 +23,7 @@ MSRV: Rust 1.86 (edition 2024)
 
 ```
 src/
-├── main.rs          # CLI entry, lifecycle, panic hook for terminal restoration
+├── main.rs          # CLI entry, scoped TUI lifecycle, and script execution
 ├── app.rs           # Central state machine (App struct), event loop, input handling
 ├── fuzzy.rs         # Fuzzy matching wrapper (nucleo-matcher)
 ├── sort.rs          # Frecency-based sorting algorithm + tests
