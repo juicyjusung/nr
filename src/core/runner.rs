@@ -40,10 +40,7 @@ fn execute_command(command: &mut Command, pm: PackageManager, script_name: &str)
     match command.status() {
         Ok(status) => status.code().unwrap_or(1),
         Err(error) => {
-            let displayed_command = match pm {
-                PackageManager::Yarn => format!("{} run {}", pm.command_name(), script_name),
-                _ => format!("{} {}", pm.command_name(), script_name),
-            };
+            let displayed_command = display_command(pm, script_name);
 
             eprintln!();
             eprintln!("❌ Failed to run script: '{displayed_command}'");
@@ -87,6 +84,13 @@ fn execute_command(command: &mut Command, pm: PackageManager, script_name: &str)
             1
         }
     }
+}
+
+fn display_command(pm: PackageManager, script_name: &str) -> String {
+    std::iter::once(pm.command_name())
+        .chain(pm.run_args(script_name))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Execute a package.json script with additional environment variables and arguments.
@@ -162,5 +166,15 @@ mod tests {
         let code = execute_command(&mut command, PackageManager::Npm, "test");
 
         assert_eq!(code, 1);
+    }
+
+    #[test]
+    fn display_command_includes_npm_run_arguments() {
+        assert_eq!(display_command(PackageManager::Npm, "test"), "npm run test");
+    }
+
+    #[test]
+    fn display_command_includes_yarn_run_arguments() {
+        assert_eq!(display_command(PackageManager::Yarn, "add"), "yarn run add");
     }
 }
