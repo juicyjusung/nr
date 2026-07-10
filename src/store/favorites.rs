@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 use std::path::Path;
 
+use anyhow::{Context, Result};
+
 /// Loads favorite scripts from the config directory.
 /// Returns an empty HashSet if the file doesn't exist or is corrupted.
 ///
@@ -36,7 +38,7 @@ pub fn load_favorites(config_dir: &Path) -> HashSet<String> {
 /// # Arguments
 /// * `config_dir` - Path to the config directory
 /// * `favorites` - HashSet of favorite script keys
-pub fn save_favorites(config_dir: &Path, favorites: &HashSet<String>) {
+pub fn save_favorites(config_dir: &Path, favorites: &HashSet<String>) -> Result<()> {
     let path = config_dir.join("favorites.json");
 
     let map: serde_json::Map<String, serde_json::Value> = favorites
@@ -44,8 +46,10 @@ pub fn save_favorites(config_dir: &Path, favorites: &HashSet<String>) {
         .map(|k| (k.clone(), serde_json::Value::Bool(true)))
         .collect();
 
-    let json = serde_json::to_string_pretty(&map).unwrap_or_else(|_| "{}".to_string());
-    std::fs::write(&path, json).ok();
+    let json = serde_json::to_string_pretty(&map).context("Failed to serialize favorites")?;
+    std::fs::write(&path, json).with_context(|| format!("Failed to write {}", path.display()))?;
+
+    Ok(())
 }
 
 /// Toggles a favorite script.
@@ -87,10 +91,21 @@ mod tests {
         favorites.insert("a1b2c3d4:root:dev".to_string());
         favorites.insert("a1b2c3d4:root:build".to_string());
 
-        save_favorites(temp_dir.path(), &favorites);
+        save_favorites(temp_dir.path(), &favorites).unwrap();
         let loaded = load_favorites(temp_dir.path());
 
         assert_eq!(favorites, loaded);
+    }
+
+    #[test]
+    fn save_favorites_returns_error_when_config_path_is_not_a_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config-file");
+        fs::write(&config_path, "not a directory").unwrap();
+
+        let error = save_favorites(&config_path, &HashSet::new()).unwrap_err();
+
+        assert!(error.to_string().contains("favorites.json"));
     }
 
     #[test]
@@ -160,7 +175,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let favorites = HashSet::new();
 
-        save_favorites(temp_dir.path(), &favorites);
+        save_favorites(temp_dir.path(), &favorites).unwrap();
 
         let path = temp_dir.path().join("favorites.json");
         assert!(path.exists());

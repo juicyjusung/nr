@@ -1,5 +1,7 @@
-use serde::{Deserialize, Serialize};
 use std::path::Path;
+
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RecentEntry {
@@ -39,10 +41,12 @@ pub fn load_recents(config_dir: &Path) -> Vec<RecentEntry> {
 /// # Arguments
 /// * `config_dir` - Path to the config directory
 /// * `recents` - Slice of RecentEntry structs
-pub fn save_recents(config_dir: &Path, recents: &[RecentEntry]) {
+pub fn save_recents(config_dir: &Path, recents: &[RecentEntry]) -> Result<()> {
     let path = config_dir.join("recents.json");
-    let json = serde_json::to_string_pretty(&recents).unwrap_or_else(|_| "[]".to_string());
-    std::fs::write(&path, json).ok();
+    let json = serde_json::to_string_pretty(&recents).context("Failed to serialize recents")?;
+    std::fs::write(&path, json).with_context(|| format!("Failed to write {}", path.display()))?;
+
+    Ok(())
 }
 
 /// Records a script execution, updating existing entry or creating a new one.
@@ -138,10 +142,21 @@ mod tests {
             },
         ];
 
-        save_recents(temp_dir.path(), &recents);
+        save_recents(temp_dir.path(), &recents).unwrap();
         let loaded = load_recents(temp_dir.path());
 
         assert_eq!(recents, loaded);
+    }
+
+    #[test]
+    fn save_recents_returns_error_when_config_path_is_not_a_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config-file");
+        fs::write(&config_path, "not a directory").unwrap();
+
+        let error = save_recents(&config_path, &[]).unwrap_err();
+
+        assert!(error.to_string().contains("recents.json"));
     }
 
     #[test]
@@ -264,7 +279,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let recents: Vec<RecentEntry> = Vec::new();
 
-        save_recents(temp_dir.path(), &recents);
+        save_recents(temp_dir.path(), &recents).unwrap();
 
         let path = temp_dir.path().join("recents.json");
         assert!(path.exists());

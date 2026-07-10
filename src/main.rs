@@ -159,11 +159,15 @@ fn finalize_tui_session(
     outcome: Result<app::Action>,
 ) -> Result<app::Action> {
     if &app.favorites != initial_favorites {
-        store::favorites::save_favorites(project_dir, &app.favorites);
+        if let Err(error) = store::favorites::save_favorites(project_dir, &app.favorites) {
+            eprintln!("⚠️ Failed to save favorites: {error:#}");
+        }
     }
 
     if matches!(&outcome, Ok(app::Action::RunScript { .. })) {
-        store::recents::save_recents(project_dir, &app.recents);
+        if let Err(error) = store::recents::save_recents(project_dir, &app.recents) {
+            eprintln!("⚠️ Failed to save recents: {error:#}");
+        }
     }
 
     outcome
@@ -316,11 +320,11 @@ mod tests {
     fn unchanged_favorites_do_not_overwrite_a_newer_disk_value_on_quit() {
         let temp_dir = TempDir::new().unwrap();
         let initial_disk_value = HashSet::from(["root:dev".to_string()]);
-        store::favorites::save_favorites(temp_dir.path(), &initial_disk_value);
+        store::favorites::save_favorites(temp_dir.path(), &initial_disk_value).unwrap();
         let app = test_app(temp_dir.path());
         let initial_favorites = app.favorites.clone();
         let newer_disk_value = HashSet::from(["root:test".to_string()]);
-        store::favorites::save_favorites(temp_dir.path(), &newer_disk_value);
+        store::favorites::save_favorites(temp_dir.path(), &newer_disk_value).unwrap();
 
         let _ = finalize_tui_session(
             temp_dir.path(),
@@ -361,5 +365,86 @@ mod tests {
             ),
             (expected_favorites, "original TUI error".to_string())
         );
+    }
+
+    #[test]
+    fn favorites_save_failure_preserves_quit_outcome() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config-file");
+        std::fs::write(&config_path, "not a directory").unwrap();
+        let mut app = test_app(temp_dir.path());
+        let initial_favorites = app.favorites.clone();
+        app.favorites.insert("root:dev".to_string());
+
+        let outcome = finalize_tui_session(
+            &config_path,
+            &initial_favorites,
+            &app,
+            Ok(app::Action::Quit),
+        );
+
+        assert!(matches!(outcome, Ok(app::Action::Quit)));
+    }
+
+    #[test]
+    fn favorites_save_failure_preserves_original_tui_error() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config-file");
+        std::fs::write(&config_path, "not a directory").unwrap();
+        let mut app = test_app(temp_dir.path());
+        let initial_favorites = app.favorites.clone();
+        app.favorites.insert("root:dev".to_string());
+
+        let outcome = finalize_tui_session(
+            &config_path,
+            &initial_favorites,
+            &app,
+            Err(anyhow::anyhow!("original TUI error")),
+        );
+        let returned_error = match outcome {
+            Ok(_) => panic!("expected the original TUI error"),
+            Err(error) => error,
+        };
+
+        assert_eq!(returned_error.to_string(), "original TUI error");
+    }
+
+    #[test]
+    fn recents_save_failure_preserves_run_script_outcome() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config-file");
+        std::fs::write(&config_path, "not a directory").unwrap();
+        let app = test_app(temp_dir.path());
+        let initial_favorites = app.favorites.clone();
+
+        let outcome = finalize_tui_session(
+            &config_path,
+            &initial_favorites,
+            &app,
+            Ok(app::Action::RunScript {
+                script_name: "dev".to_string(),
+                cwd: temp_dir.path().to_path_buf(),
+                env_files: Vec::new(),
+                args: "--watch".to_string(),
+            }),
+        );
+
+        match outcome {
+            Ok(app::Action::RunScript {
+                script_name,
+                cwd,
+                env_files,
+                args,
+            }) => assert_eq!(
+                (script_name, cwd, env_files, args),
+                (
+                    "dev".to_string(),
+                    temp_dir.path().to_path_buf(),
+                    Vec::new(),
+                    "--watch".to_string(),
+                )
+            ),
+            _ => panic!("expected the original RunScript action"),
+        }
     }
 }
