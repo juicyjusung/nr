@@ -6,7 +6,7 @@ Thank you for your interest in contributing to `nr`! This document provides guid
 
 ### Prerequisites
 
-- Rust 1.85 or later
+- Rust 1.86 or later
 - Git
 - A package manager (npm, yarn, pnpm, or bun) for testing
 

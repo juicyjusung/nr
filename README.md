@@ -105,7 +105,7 @@ Your configuration is automatically saved per script and restored next time!
 
 ## Building from Source
 
-Requires Rust 1.85+.
+Requires Rust 1.86+.
 
 ```bash
 cargo build --release

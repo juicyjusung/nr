@@ -13,8 +13,9 @@ fn test_global_env_persists_across_sessions() {
     let config_dir = temp_dir.path();
 
     // First session: save global env
-    let mut config = GlobalEnvConfig::default();
-    config.last_env_files = vec![".env".to_string(), ".env.local".to_string()];
+    let config = GlobalEnvConfig {
+        last_env_files: vec![".env".to_string(), ".env.local".to_string()],
+    };
     save_global_env_config(config_dir, &config).unwrap();
 
     // Second session: load global env
@@ -77,8 +78,9 @@ fn test_global_env_independent_of_script_args() {
     save_script_configs(config_dir, &script_configs).unwrap();
 
     // Save global env
-    let mut global_env = GlobalEnvConfig::default();
-    global_env.last_env_files = vec![".env".to_string()];
+    let mut global_env = GlobalEnvConfig {
+        last_env_files: vec![".env".to_string()],
+    };
     save_global_env_config(config_dir, &global_env).unwrap();
 
     // Update global env
@@ -175,8 +177,9 @@ fn test_multiple_scripts_share_global_env() {
     let config_dir = temp_dir.path();
 
     // Save global env (shared)
-    let mut global_env = GlobalEnvConfig::default();
-    global_env.last_env_files = vec![".env".to_string(), ".env.local".to_string()];
+    let global_env = GlobalEnvConfig {
+        last_env_files: vec![".env".to_string(), ".env.local".to_string()],
+    };
     save_global_env_config(config_dir, &global_env).unwrap();
 
     // Save different args for different scripts
@@ -228,8 +231,9 @@ fn test_global_env_updates_affect_all_scripts() {
     let config_dir = temp_dir.path();
 
     // Initial global env
-    let mut global_env = GlobalEnvConfig::default();
-    global_env.last_env_files = vec![".env".to_string()];
+    let mut global_env = GlobalEnvConfig {
+        last_env_files: vec![".env".to_string()],
+    };
     save_global_env_config(config_dir, &global_env).unwrap();
 
     // Update global env (simulating execution from any script)
