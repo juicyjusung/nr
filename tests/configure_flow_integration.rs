@@ -2,8 +2,11 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use indexmap::IndexMap;
 use nr::app::{Action, App, AppMode};
 use nr::core::package_manager::PackageManager;
+use nr::store::script_configs::ScriptConfig;
+use ratatui::{Terminal, backend::TestBackend};
 use std::collections::HashSet;
 use std::fs;
+use std::time::SystemTime;
 use tempfile::TempDir;
 
 /// Helper to create a test app with minimal setup
@@ -113,6 +116,32 @@ fn test_configure_flow_restores_script_specific_args() {
     // Args should be restored in args_input after entering args mode
     // (when mode switches to ConfigureArgs, args from execution_config should be in args_input)
     assert_eq!(app.args_input, "-w");
+}
+
+#[test]
+fn test_configure_flow_places_cursor_at_end_of_restored_non_ascii_args() {
+    let temp_dir = TempDir::new().unwrap();
+    let project_dir = temp_dir.path();
+    let mut app = create_test_app(project_dir);
+    let script = &app.scripts[app.filtered_indices[app.selected_index]];
+    let script_key = format!(
+        "{}:{}",
+        nr::store::project_id::project_id(project_dir),
+        script.key
+    );
+    app.script_configs.insert(
+        script_key,
+        ScriptConfig {
+            args: "한글".to_string(),
+            last_used: SystemTime::now(),
+        },
+    );
+
+    app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.args_input, "한글");
+    assert_eq!(app.args_cursor_pos, 2);
 }
 
 #[test]
@@ -300,6 +329,82 @@ fn test_configure_flow_args_input_editing() {
 }
 
 #[test]
+fn test_configure_flow_args_input_accepts_sequential_non_ascii_characters() {
+    let temp_dir = TempDir::new().unwrap();
+    let project_dir = temp_dir.path();
+    let mut app = create_test_app(project_dir);
+
+    app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    for character in "한글".chars() {
+        app.handle_key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE));
+    }
+
+    assert_eq!(app.args_input, "한글");
+    assert_eq!(app.args_cursor_pos, 2);
+}
+
+#[test]
+fn test_configure_flow_args_normalizes_out_of_range_cursor_before_backspace() {
+    let temp_dir = TempDir::new().unwrap();
+    let project_dir = temp_dir.path();
+    let mut app = create_test_app(project_dir);
+
+    app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    app.args_input = "한글".to_string();
+    app.args_cursor_pos = 99;
+
+    app.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+
+    assert_eq!((app.args_input.as_str(), app.args_cursor_pos), ("한", 1));
+}
+
+#[test]
+fn test_configure_flow_args_edits_unicode_at_middle_cursor() {
+    let temp_dir = TempDir::new().unwrap();
+    let project_dir = temp_dir.path();
+    let mut app = create_test_app(project_dir);
+
+    app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    for character in "한글".chars() {
+        app.handle_key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE));
+    }
+    app.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+
+    app.handle_key(KeyEvent::new(KeyCode::Char('A'), KeyModifiers::NONE));
+    assert_eq!((app.args_input.as_str(), app.args_cursor_pos), ("한A글", 2));
+
+    app.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+    assert_eq!((app.args_input.as_str(), app.args_cursor_pos), ("한글", 1));
+
+    app.handle_key(KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE));
+    assert_eq!((app.args_input.as_str(), app.args_cursor_pos), ("한", 1));
+}
+
+#[test]
+fn test_configure_flow_args_cancel_and_reenter_resets_cursor_to_restored_input_end() {
+    let temp_dir = TempDir::new().unwrap();
+    let project_dir = temp_dir.path();
+    let mut app = create_test_app(project_dir);
+
+    app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    for character in "한글".chars() {
+        app.handle_key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE));
+    }
+
+    app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.args_input, "");
+    assert_eq!(app.args_cursor_pos, 0);
+}
+
+#[test]
 fn test_configure_flow_args_cursor_movement() {
     let temp_dir = TempDir::new().unwrap();
     let project_dir = temp_dir.path();
@@ -330,6 +435,19 @@ fn test_configure_flow_args_cursor_movement() {
     // Move cursor to end
     app.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
     assert_eq!(app.args_cursor_pos, 4);
+}
+
+#[test]
+fn test_args_input_renderer_clamps_cursor_beyond_character_end() {
+    let backend = TestBackend::new(80, 24);
+    let mut terminal = Terminal::new(backend).unwrap();
+
+    terminal
+        .draw(|frame| {
+            let area = frame.area();
+            nr::ui::args_input::render_args_input(frame, area, "한글", 99, &[], None);
+        })
+        .unwrap();
 }
 
 #[test]
