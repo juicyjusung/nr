@@ -45,7 +45,7 @@ where
     }
 
     let mut matches = fuzzy_matches(items, query, get_text);
-    matches.sort_by(|a, b| b.score.cmp(&a.score));
+    matches.sort_by_key(|matched| std::cmp::Reverse(matched.score));
     matches.into_iter().map(|matched| matched.index).collect()
 }
 
