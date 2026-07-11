@@ -9,3 +9,6 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # This tag is the repository's MSRV contract, not an action release.
+      - dependency-name: "dtolnay/rust-toolchain"
