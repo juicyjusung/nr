@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.3](https://github.com/juicyjusung/nr/compare/v0.2.2...v0.2.3) (2026-07-11)
+
+
+### Bug Fixes
+
+* **args:** make editing unicode-safe ([ce24e10](https://github.com/juicyjusung/nr/commit/ce24e1058ce2d7b3ca4c59f3dea98baf95b24ebb))
+* harden runtime, persistence, and release contracts ([1d9352b](https://github.com/juicyjusung/nr/commit/1d9352bc83bac0699f0c36d13119ac73b34a1083))
+* **runner:** align failure command display ([c755b0d](https://github.com/juicyjusung/nr/commit/c755b0d81b078c3c32791fda174f023ade9ff5d0))
+* **runner:** use explicit package manager run ([5c26d0c](https://github.com/juicyjusung/nr/commit/5c26d0c16b1f27eec9e50ea6499d4b95183fe275))
+* **sort:** preserve fuzzy relevance ([7996c4d](https://github.com/juicyjusung/nr/commit/7996c4d2d585be72b7c779ff5dc36cc4de052e3a))
+* **store:** report persistence failures ([7a71632](https://github.com/juicyjusung/nr/commit/7a71632da123e06289fe915d55f9da35de704f47))
+* **tui:** finalize session state reliably ([3a812d5](https://github.com/juicyjusung/nr/commit/3a812d5457661895dae3446aa765b0a8e9172c6c))
+
 ## [0.2.2](https://github.com/juicyjusung/nr/compare/v0.2.1...v0.2.2) (2026-02-09)
 
 
