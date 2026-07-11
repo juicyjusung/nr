@@ -1,148 +1,183 @@
-# nr <sub>(npm run, but better)</sub>
+# nr
 
-> Interactive npm script runner for your terminal.
+> Find and run `package.json` scripts without memorizing their names.
+
+`nr` is a keyboard-first terminal UI for npm, pnpm, Yarn, and Bun.
 
 [![CI](https://github.com/juicyjusung/nr/actions/workflows/ci.yml/badge.svg)](https://github.com/juicyjusung/nr/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/juicyjusung/nr)](https://github.com/juicyjusung/nr/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-![demo](assets/demo.gif)
+![nr demo showing fuzzy script search, favorites, and monorepo package navigation](assets/demo.gif)
 
-<details>
-<summary>📹 What's happening in the demo?</summary>
+## Quick start
 
-The demo showcases:
-- **Fuzzy search**: Typing `tst` finds "test", `bld` finds "build" - no exact names needed!
-- **Navigation**: Use `↑` `↓` arrow keys to browse scripts
-- **Favorites**: Press `Space` to star your most-used scripts
-- **Monorepo support**: Press `→` to switch to Packages tab, `Enter` to view package scripts, `←` to go back
-- **Quick exit**: Press `Esc` to quit anytime
+Choose an installation method for your platform.
 
-</details>
-
-## Why nr?
-
-`npm run` requires you to remember exact script names. `nr` gives you a fuzzy-searchable, interactive TUI — just type a few letters and hit enter.
-
-## Features
-
-- **Fuzzy search** — Find scripts instantly, no need to remember exact names
-- **Favorites & recents** — Starred scripts float to the top; frecency-based sorting learns your habits
-- **Environment variables** — Select `.env` files before execution with configurable flow (Tab key)
-- **Script arguments** — Pass additional arguments with history and cursor editing
-- **Configuration memory** — Remembers your last env/args choices per script
-- **Monorepo support** — Works with npm, yarn, pnpm, and bun workspaces out of the box
-- **Auto-detection** — Picks the right package manager from your lockfile
-- **Fast & lightweight** — Single ~1 MB binary, no runtime dependencies
-
-## Installation
-
-### Homebrew (macOS / Linux)
+### Homebrew — macOS and glibc Linux
 
 ```bash
 brew install juicyjusung/tap/nr
 ```
 
-### Shell script (macOS / Linux)
+### Scoop — Windows
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/juicyjusung/nr/main/install.sh | sh
-```
-
-### Cargo
-
-```bash
-cargo install --git https://github.com/juicyjusung/nr
-```
-
-### Scoop (Windows)
+Custom Scoop buckets require Git; run `scoop install git` first if Git is not already available.
 
 ```powershell
-scoop bucket add juicyjusung https://github.com/juicyjusung/nr
-scoop install nr
+scoop bucket add juicyjusung https://github.com/juicyjusung/nr.git
+scoop install juicyjusung/nr
 ```
 
-### GitHub Releases
-
-Pre-built binaries for all platforms are available on the [Releases](https://github.com/juicyjusung/nr/releases/latest) page.
-
-## Usage
-
-Run `nr` in any directory with a `package.json`:
+### Shell installer — macOS and glibc Linux
 
 ```bash
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://raw.githubusercontent.com/juicyjusung/nr/main/install.sh | sh
+```
+
+The installer downloads the latest release for the detected OS and architecture, verifies its SHA-256 checksum, and installs `nr` to `~/.local/bin` by default.
+
+Then run `nr` anywhere inside a project that has a `package.json` in the current directory or one of its parents:
+
+```bash
+cd path/to/project
 nr
 ```
 
-That's it. Start typing to search, arrow keys to navigate, enter to run.
+Start typing to filter scripts. Press `Enter` to run the selected script, or `Tab` to choose environment files and add arguments first.
 
-## Key Bindings
+## More installation options
+
+### Build and install with Cargo
+
+Source-based installation requires Rust 1.86 or newer:
+
+```bash
+cargo install --locked --git https://github.com/juicyjusung/nr.git nr
+```
+
+The Git URL is intentional: the `nr` package name on crates.io belongs to a different project.
+
+### Install to a custom directory
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://raw.githubusercontent.com/juicyjusung/nr/main/install.sh | \
+  sh -s -- --install-dir /usr/local/bin
+```
+
+### Prebuilt binaries
+
+[GitHub Releases](https://github.com/juicyjusung/nr/releases/latest) provides archives and SHA-256 checksums for:
+
+| Operating system | Architectures |
+| --- | --- |
+| macOS | Intel (`x86_64`), Apple silicon (`aarch64`) |
+| Linux with glibc | `x86_64`, `aarch64` |
+| Windows | `x86_64`, `aarch64` |
+
+Alpine/musl and 32-bit binaries are not currently published.
+
+## What `nr` does
+
+| Capability | Behavior |
+| --- | --- |
+| Find | Fuzzy-matches script and package names as you type. |
+| Prioritize | Ranks by fuzzy relevance while searching; with no query, puts favorites first and orders the rest by frecency. |
+| Configure | Selects `.env*` files, accepts additional arguments, and previews the run before execution. |
+| Browse workspaces | Finds packages from the `workspaces` field in `package.json` or from `pnpm-workspace.yaml`, then runs scripts in the package directory. |
+| Detect and run | Chooses npm, pnpm, Yarn, or Bun from project metadata and invokes it as `<manager> run <script>`. |
+
+`nr` is distributed as a single executable; you do not install a global Node package to launch it. The package-manager CLI used by your project must still be available in `PATH` so `nr` can run its scripts.
+
+## Running scripts
+
+There are two execution paths:
+
+| Goal | Key | Result |
+| --- | --- | --- |
+| Run now | `Enter` on a script | Runs immediately with the detected package manager, without applying saved environment or argument settings. |
+| Configure first | `Tab` on a script | Opens environment selection, argument input, and a final command preview. |
+
+The configuration flow:
+
+1. Finds `.env*` files in the selected package and, when applicable, the monorepo root.
+2. Lets you select files and enter space-separated script arguments.
+3. Shows the command, environment filenames, and working directory before execution.
+
+Selected root environment files are loaded before package-local files, so package-local values take precedence. `nr` remembers arguments per script, argument history per project, and the most recently selected environment filenames for the project. Environment values are read only when the script runs; they are not copied into `nr`'s stored state.
+
+Arguments are split on whitespace and passed directly to the package manager. Shell-style quoting and expansion are not interpreted.
+
+## Key bindings
+
+### Script and package lists
 
 | Key | Action |
-|-----|--------|
-| `↑` `↓` | Navigate scripts |
-| `Enter` | Run selected script immediately |
-| `Tab` | Configure & run (select .env files + add arguments) |
-| `Space` | Toggle favorite |
-| `←` `→` | Switch tabs (Scripts / Packages) |
-| `Esc` | Quit or go back |
-| `Ctrl+C` | Quit anytime (even in modals) |
-| Type | Fuzzy search |
+| --- | --- |
+| Type / `Backspace` | Update the fuzzy-search query. |
+| `↑` / `↓` | Move the selection; navigation wraps at either end. |
+| `Enter` | Run a script, or open the selected package from the Packages tab. |
+| `Tab` | Configure the selected script before running it. |
+| `Space` | Toggle the selected script as a favorite. |
+| `←` / `→` | Switch between Scripts and Packages when workspaces are available. |
+| `Esc` | Go back, cancel configuration, or quit at the top level. |
+| `Ctrl+C` | Quit from any screen. |
 
-### Configuration Flow (Tab Key)
+<details>
+<summary>Configuration flow keys</summary>
 
-Press `Tab` on any script to enter the 3-step configuration flow:
+| Step | Keys |
+| --- | --- |
+| Environment files | `↑` / `↓` to navigate, `Space` to select, `Enter` to continue, `Esc` to cancel. |
+| Arguments | Type to edit; use `←` / `→`, `Home`, `End`, `Backspace`, and `Delete`; use `↑` / `↓` for history; press `Enter` to continue or `Esc` to go back. |
+| Confirmation | `Enter` to execute or `Esc` to return to the argument editor. |
 
-1. **Environment Selection**: Choose `.env` files from package and root directories
-2. **Arguments Input**: Add extra arguments with history (use `←` `→` for cursor movement)
-3. **Confirmation**: Review and execute with the full command preview
+</details>
 
-Your configuration is automatically saved per script and restored next time!
+## Project and workspace discovery
 
-## Monorepo Support
+Starting from the current directory, `nr` walks upward to find the nearest `package.json`. It then continues upward to find a monorepo root declared by either:
 
-`nr` auto-detects workspaces (npm, yarn, pnpm, bun). Use the **Packages** tab to browse workspace packages and their scripts.
+- a `workspaces` array or `workspaces.packages` array in `package.json`; or
+- a `packages` list in `pnpm-workspace.yaml`.
 
-## Building from Source
+When workspace packages are found, the Packages tab lets you search packages, open one, and run its scripts with that package as the working directory.
 
-Requires Rust 1.86+.
+The nearest `package.json` must contain at least one string-valued script. If a monorepo root has no scripts of its own, start `nr` from a workspace package that does.
 
-```bash
-cargo build --release
-```
+## Package-manager detection
 
-### Generating Demo GIF
+Detection is lockfile-first: Bun, pnpm, Yarn, then npm. If no supported lockfile exists, `nr` reads the `packageManager` field from `package.json`; if that is absent or unknown, it falls back to npm.
 
-To regenerate the demo GIF:
+## Local state
 
-```bash
-# Install VHS
-brew install vhs
+Favorites, recent runs, saved arguments, argument history, and selected environment filenames are stored locally and isolated per project. `nr` uses `$XDG_CONFIG_HOME/nr` when set, otherwise the platform-native configuration directory, with project data under `projects/<project-id>/`.
 
-# Generate demo
-./scripts/generate-demo.sh
-```
-
-Or manually:
+Useful project-scoped reset commands:
 
 ```bash
-cargo build --release
-export PATH="$PWD/target/release:$PATH"
-vhs demo.tape
+nr --reset-favorites
+nr --reset-recents
 ```
 
-See `assets/README.md` for more details.
+Run `nr --help` for built-in usage help.
 
-## Contributing
+## Building from source
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
+```bash
+git clone https://github.com/juicyjusung/nr.git
+cd nr
+cargo build --release --locked
+```
 
-- Setting up your development environment
-- Code style and testing guidelines
-- Commit message conventions
-- Pull request process
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and the exact CI-compatible checks to run before opening a pull request.
 
-Feel free to open issues for bugs or feature requests, or join discussions about the project's future.
+## Support
+
+- See [CHANGELOG.md](CHANGELOG.md) for notable changes.
+- Report bugs or request features in [GitHub Issues](https://github.com/juicyjusung/nr/issues).
 
 ## License
 

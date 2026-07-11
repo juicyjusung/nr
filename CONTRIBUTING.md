@@ -1,289 +1,116 @@
 # Contributing to nr
 
-Thank you for your interest in contributing to `nr`! This document provides guidelines and instructions for contributing.
+Thanks for helping improve `nr`. This guide describes the development workflow and the checks a pull request must pass.
 
-## Getting Started
+## Before you start
 
-### Prerequisites
+- Search [open issues](https://github.com/juicyjusung/nr/issues) before starting overlapping work.
+- For a substantial change, open a feature request first so its behavior and compatibility can be agreed on.
+- Report security vulnerabilities privately as described in [SECURITY.md](SECURITY.md), not in a public issue.
 
-- Rust 1.86 or later
-- Git
-- A package manager (npm, yarn, pnpm, or bun) for testing
+You need Git, Rust 1.86 or newer, and at least one supported package manager (npm, pnpm, Yarn, or Bun) for end-to-end testing.
 
-### Development Setup
+## Set up the project
 
-1. Fork and clone the repository:
+1. Fork and clone the repository.
+
    ```bash
    git clone https://github.com/YOUR_USERNAME/nr.git
    cd nr
    ```
 
-2. Build the project:
+2. Build and test the project.
+
    ```bash
-   cargo build
+   cargo build --locked
+   cargo test --all-targets --locked
    ```
 
-3. Run tests:
+3. Run `nr` from a fixture project.
+
    ```bash
-   cargo test
+   cd examples/demo-project
+   ../../target/debug/nr
    ```
 
-4. Run the binary:
-   ```bash
-   cargo run
-   ```
+## Architecture
 
-## Development Workflow
+`nr` keeps state management, business logic, persistence, and rendering separate:
 
-### Code Style
-
-We follow standard Rust conventions:
-
-- **Format**: Run `cargo fmt` before committing
-- **Lint**: Ensure `cargo clippy` passes with no warnings
-- **Tests**: All tests must pass via `cargo test`
-
-```bash
-# Check everything before committing
-cargo fmt --check
-cargo clippy -- -D warnings
-cargo test
-```
-
-### Project Structure
-
-```
+```text
 src/
-├── main.rs           # CLI entry point, lifecycle management
-├── app.rs            # Main application state machine
-├── fuzzy.rs          # Fuzzy search implementation
-├── sort.rs           # Script sorting with frecency algorithm
-├── core/             # Business logic (stateless)
-│   ├── package_manager.rs
-│   ├── project_root.rs
-│   ├── scripts.rs
-│   ├── workspaces.rs
-│   ├── runner.rs
-│   └── package_json.rs
-├── store/            # Persistence layer
-│   ├── favorites.rs
-│   ├── recents.rs
-│   ├── project_id.rs
-│   └── config_path.rs
-└── ui/               # Pure rendering functions
-    ├── script_list.rs
-    ├── package_list.rs
-    ├── search_input.rs
-    ├── status_bar.rs
-    ├── tabs.rs
-    └── header_bar.rs
+├── main.rs    CLI startup, TUI lifecycle, persistence, and script execution
+├── app.rs     Application state machine and input handling
+├── fuzzy.rs   Fuzzy-matching adapter
+├── sort.rs    Favorites, frecency, and fuzzy-result ordering
+├── core/      Project discovery, package data, environment files, and execution
+├── store/     JSON-backed user preferences and execution history
+└── ui/        Stateless Ratatui rendering functions
 ```
 
-### Architecture Principles
+Keep these boundaries intact unless a change has a clear reason to move them:
 
-- **Pure UI functions**: All `ui/` modules should be stateless render functions
-- **Stateless core**: `core/` modules should be pure functions with no shared state
-- **Index-based filtering**: Use `Vec<usize>` indices to avoid cloning data
-- **Error handling**: Use `anyhow::Result` for application-level errors, `thiserror` for domain errors
-- **No unwrap()**: Use `?` operator or explicit error handling in production code
+- `App` owns mutable UI state; input handling returns an `Action` for lifecycle work.
+- `core` contains stateless business logic and must not depend on the TUI.
+- `ui` functions render data passed to them and do not retain application state.
+- Filtered lists store indices into source collections instead of cloned entries.
+- Persistence is scoped by project ID under the user's platform config directory.
+- Use `anyhow::Result` at application boundaries and typed errors where callers need to distinguish failures.
+- Do not use `unwrap()` on production paths; propagate errors or handle them explicitly.
 
-## Writing Tests
+## Make a change
 
-### Test Guidelines
-
-1. **Location**: Tests live in `#[cfg(test)] mod tests` within the same file as the code
-2. **Coverage**: Add tests for new features and bug fixes
-3. **Edge cases**: Test empty inputs, invalid data, and boundary conditions
-
-### Example Test
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_feature_name() {
-        // Arrange
-        let input = "test";
-        
-        // Act
-        let result = my_function(input);
-        
-        // Assert
-        assert_eq!(result, expected);
-    }
-}
-```
-
-### Running Tests
+Create a focused branch from `main` and keep each pull request to one cohesive change.
 
 ```bash
-# Run all tests
-cargo test
-
-# Run tests for a specific module
-cargo test sort
-
-# Run tests with output
-cargo test -- --nocapture
+git checkout main
+git pull --ff-only
+git checkout -b fix/short-description
 ```
 
-## Commit Messages
+Add a regression or characterization test before changing behavior that users may rely on. Tests normally live in a `#[cfg(test)] mod tests` next to the implementation. Cover failure paths and boundary cases as well as the successful path.
 
-We use [Conventional Commits](https://www.conventionalcommits.org/) for clear commit history:
+For TUI or runner changes, also exercise the relevant flow manually with the package managers and operating systems affected by the change. Avoid putting secrets or real credentials in test fixtures, logs, screenshots, or issues.
 
-```
-<type>(<scope>): <subject>
+## Run the checks
 
-[optional body]
-
-[optional footer]
-```
-
-### Types
-
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation changes
-- `style`: Code style changes (formatting, no logic change)
-- `refactor`: Code refactoring
-- `test`: Adding or updating tests
-- `chore`: Maintenance tasks, dependency updates
-
-### Examples
+Run the same checks enforced by CI before opening a pull request:
 
 ```bash
-feat(ui): add keyboard shortcuts help dialog
-fix(sort): correct frecency calculation for old entries
-docs(readme): update installation instructions
-test(fuzzy): add test for case-insensitive matching
+cargo fmt -- --check
+cargo clippy --all-targets --all-features --locked -- -D warnings
+cargo test --all-targets --locked
+cargo +1.86.0 check --all-targets --locked
 ```
 
-## Pull Request Process
+Install the MSRV toolchain with `rustup toolchain install 1.86.0` if needed. Run `cargo build --release --locked` when changing packaging, dependencies, release settings, or code that may materially affect binary size.
 
-### Before Submitting
+Use [Conventional Commits](https://www.conventionalcommits.org/) for commit messages and pull request titles, for example:
 
-1. **Create a branch** from `main`:
-   ```bash
-   git checkout -b feat/my-feature
-   ```
-
-2. **Make your changes** following the code style guidelines
-
-3. **Run the pre-submission checklist**:
-   ```bash
-   cargo fmt
-   cargo clippy -- -D warnings
-   cargo test
-   cargo build --release
-   ```
-
-4. **Write clear commit messages** using Conventional Commits
-
-5. **Push your branch**:
-   ```bash
-   git push origin feat/my-feature
-   ```
-
-### PR Guidelines
-
-- **Title**: Use Conventional Commits format (e.g., `feat: add script history`)
-- **Description**: Clearly explain:
-  - What changes were made
-  - Why these changes are needed
-  - Any breaking changes or migration notes
-- **Tests**: Include tests for new features
-- **Documentation**: Update README.md or other docs if needed
-- **One feature per PR**: Keep PRs focused and reviewable
-
-### PR Checklist
-
-- [ ] Code follows project style guidelines (`cargo fmt`, `cargo clippy`)
-- [ ] All tests pass (`cargo test`)
-- [ ] New tests added for new features
-- [ ] Documentation updated if needed
-- [ ] Commit messages follow Conventional Commits
-- [ ] No breaking changes (or clearly documented)
-- [ ] Binary size checked (should stay ~1 MB)
-
-## Reporting Issues
-
-### Bug Reports
-
-When reporting bugs, please include:
-
-1. **Description**: Clear description of the issue
-2. **Reproduction steps**: Step-by-step instructions to reproduce
-3. **Expected behavior**: What you expected to happen
-4. **Actual behavior**: What actually happened
-5. **Environment**:
-   - OS and version (e.g., macOS 14.2, Ubuntu 22.04)
-   - `nr` version (`nr --version`)
-   - Package manager (npm, yarn, pnpm, bun) and version
-6. **Logs**: Any error messages or debug output
-
-### Feature Requests
-
-For feature requests, please describe:
-
-1. **Problem**: What problem does this solve?
-2. **Proposed solution**: How should it work?
-3. **Alternatives**: Other solutions you've considered
-4. **Context**: Why is this important to you?
-
-## Development Tips
-
-### Testing with Example Project
-
-```bash
-# Build and run in example project
-cargo build --release
-cd examples/demo-project
-../../target/release/nr
+```text
+feat(ui): add keyboard shortcut help
+fix(sort): preserve fuzzy relevance
+docs(readme): clarify installation
 ```
 
-### Debugging TUI Issues
+## Open a pull request
 
-1. Use `eprintln!()` for debug output (goes to stderr, not captured by TUI)
-2. Test panic recovery manually (trigger a panic to see if terminal restores)
-3. Test on different terminals (iTerm2, Terminal.app, Windows Terminal, etc.)
+In the pull request:
 
-### Performance Testing
+- Explain the problem and why the chosen change solves it.
+- Describe user-visible or compatibility effects, including any migration needs.
+- List the exact automated and manual verification performed.
+- Update documentation when commands, behavior, storage, or support change.
+- Link the issue the pull request resolves, when one exists, and record final verification on that owning issue as the project record.
 
-For large projects with many scripts:
+CI runs formatting, Clippy, MSRV, and tests on Linux, macOS, and Windows. Address failures rather than suppressing a lint or weakening a test.
 
-```bash
-# Generate large package.json
-node -e "
-const scripts = {};
-for (let i = 0; i < 500; i++) {
-  scripts[\`script-\${i}\`] = 'echo test';
-}
-console.log(JSON.stringify({ scripts }, null, 2));
-" > package.json
+## Get support
 
-# Test nr performance
-time cargo run --release
-```
+Use the repository's [issue forms](https://github.com/juicyjusung/nr/issues/new/choose) for reproducible bugs and feature requests. Search existing issues first and include your `nr` version, operating system, package-manager version, and relevant project or workspace layout.
 
-## Code Review Process
-
-1. **Automatic checks**: CI runs tests, linting, and formatting checks
-2. **Maintainer review**: A maintainer will review your code
-3. **Feedback**: Address any requested changes
-4. **Merge**: Once approved, maintainer will merge your PR
-
-## Questions?
-
-- **Discussions**: Use [GitHub Discussions](https://github.com/juicyjusung/nr/discussions) for general questions
-- **Issues**: Use [GitHub Issues](https://github.com/juicyjusung/nr/issues) for bugs and feature requests
-- **Chat**: (Add Discord/Slack link if available)
+If you are unsure whether unexpected behavior is a bug, file a bug report with the information you have; maintainers can reclassify it. Do not include access tokens, environment-variable values, private package contents, or other sensitive data.
 
 ## License
 
 By contributing to `nr`, you agree that your contributions will be licensed under the [MIT License](LICENSE).
-
----
-
-Thank you for contributing! 🎉
