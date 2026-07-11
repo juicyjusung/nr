@@ -33,6 +33,13 @@ mod tests {
     }
 
     #[test]
+    fn project_id_matches_stable_sha256_prefix() {
+        let path = Path::new("/home/user/project");
+
+        assert_eq!(project_id(path), "9dad1e4e");
+    }
+
+    #[test]
     fn test_project_id_is_8_chars() {
         let path = Path::new("/home/user/project");
         let id = project_id(path);
