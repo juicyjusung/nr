@@ -57,7 +57,7 @@ pub fn render_script_list(
                 },
             ),
             Span::styled(
-                format!("{:<width$}", &script.name, width = name_width),
+                format!("{:<width$}", script.name, width = name_width),
                 if is_selected {
                     Style::default().bold().bg(Color::DarkGray)
                 } else {

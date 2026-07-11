@@ -58,6 +58,7 @@ pub fn render_args_input(
     } else {
         let mut spans = Vec::new();
         let chars: Vec<char> = input.chars().collect();
+        let cursor_pos = cursor_pos.min(chars.len());
 
         // Characters before cursor
         if cursor_pos > 0 {

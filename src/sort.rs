@@ -1,4 +1,4 @@
-use crate::fuzzy::fuzzy_filter;
+use crate::fuzzy::fuzzy_matches;
 use crate::store::recents::{self, RecentEntry};
 use std::collections::HashSet;
 
@@ -86,8 +86,7 @@ fn sort_scripts_with_query(
     recents: &[RecentEntry],
     query: &str,
 ) -> Vec<usize> {
-    // Get fuzzy-matched indices in relevance order
-    let matched = fuzzy_filter(scripts, query, |s| &s.name);
+    let mut matches = fuzzy_matches(scripts, query, |s| &s.name);
 
     // Build recent scores map
     let now = recents::now_ms();
@@ -99,23 +98,13 @@ fn sort_scripts_with_query(
         );
     }
 
-    // Stable sort by: relevance (already done by fuzzy_filter), then favorite, then recent
-    let mut indices = matched;
-    indices.sort_by(|&a, &b| {
-        let script_a = &scripts[a];
-        let script_b = &scripts[b];
+    matches.sort_by(|a, b| {
+        let script_a = &scripts[a.index];
+        let script_b = &scripts[b.index];
 
         let is_fav_a = favorites.contains(&script_a.key);
         let is_fav_b = favorites.contains(&script_b.key);
 
-        // Favorites win ties
-        match (is_fav_a, is_fav_b) {
-            (true, false) => return std::cmp::Ordering::Less,
-            (false, true) => return std::cmp::Ordering::Greater,
-            _ => {}
-        }
-
-        // Then recency wins ties
         let score_a = recent_scores
             .get(script_a.key.as_str())
             .copied()
@@ -125,12 +114,18 @@ fn sort_scripts_with_query(
             .copied()
             .unwrap_or(0.0);
 
-        score_b
-            .partial_cmp(&score_a)
-            .unwrap_or(std::cmp::Ordering::Equal)
+        b.score
+            .cmp(&a.score)
+            .then_with(|| is_fav_b.cmp(&is_fav_a))
+            .then_with(|| {
+                score_b
+                    .partial_cmp(&score_a)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| a.index.cmp(&b.index))
     });
 
-    indices
+    matches.into_iter().map(|matched| matched.index).collect()
 }
 
 #[cfg(test)]
@@ -260,10 +255,25 @@ mod tests {
     }
 
     #[test]
+    fn test_with_query_weaker_favorite_does_not_outrank_stronger_match() {
+        let scripts = vec![
+            make_script("build", "build"),
+            make_script("xbuildx", "xbuildx"),
+        ];
+
+        let mut favorites = HashSet::new();
+        favorites.insert("xbuildx".to_string());
+
+        let result = sort_scripts(&scripts, &favorites, &[], "build");
+
+        assert_eq!(result, vec![0, 1]);
+    }
+
+    #[test]
     fn test_with_query_favorite_breaks_tie() {
         let scripts = vec![
             make_script("test", "test"),
-            make_script("test:unit", "test:unit"),
+            make_script("test:unit", "test"),
         ];
 
         let mut favorites = HashSet::new();
@@ -273,7 +283,7 @@ mod tests {
 
         let result = sort_scripts(&scripts, &favorites, &recents, "test");
 
-        // Both match "test", but "test:unit" is favorite
+        // Both have the same fuzzy score, but "test:unit" is favorite
         assert_eq!(result[0], 1); // test:unit (favorite)
     }
 
@@ -281,7 +291,7 @@ mod tests {
     fn test_with_query_recent_breaks_tie() {
         let scripts = vec![
             make_script("test", "test"),
-            make_script("test:unit", "test:unit"),
+            make_script("test:unit", "test"),
         ];
 
         let recents = vec![make_recent("test:unit", 10, 10)];
@@ -290,8 +300,35 @@ mod tests {
 
         let result = sort_scripts(&scripts, &favorites, &recents, "test");
 
-        // Both match "test", but "test:unit" is recent
+        // Both have the same fuzzy score, but "test:unit" is recent
         assert_eq!(result[0], 1); // test:unit (recent)
+    }
+
+    #[test]
+    fn test_with_query_weaker_recent_does_not_outrank_stronger_match() {
+        let scripts = vec![
+            make_script("build", "build"),
+            make_script("xbuildx", "xbuildx"),
+        ];
+
+        let recents = vec![make_recent("xbuildx", 10, 10)];
+
+        let result = sort_scripts(&scripts, &HashSet::new(), &recents, "build");
+
+        assert_eq!(result, vec![0, 1]);
+    }
+
+    #[test]
+    fn test_with_query_keeps_original_order_when_all_ranking_signals_tie() {
+        let scripts = vec![
+            make_script("test:a", "test"),
+            make_script("test:b", "test"),
+            make_script("test:c", "test"),
+        ];
+
+        let result = sort_scripts(&scripts, &HashSet::new(), &[], "test");
+
+        assert_eq!(result, vec![0, 1, 2]);
     }
 
     #[test]

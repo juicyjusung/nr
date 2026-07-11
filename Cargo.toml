@@ -2,7 +2,7 @@
 name = "nr"
 version = "0.2.2"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.86"
 description = "TUI-based npm script runner with fuzzy search"
 license = "MIT"
 repository = "https://github.com/juicyjusung/nr"

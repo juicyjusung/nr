@@ -1,6 +1,39 @@
 use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Config, Matcher, Utf32Str};
 
+pub(crate) struct FuzzyMatch {
+    pub(crate) index: usize,
+    pub(crate) score: u32,
+}
+
+/// Scores matching items while retaining their original order.
+pub(crate) fn fuzzy_matches<T, F>(items: &[T], query: &str, get_text: F) -> Vec<FuzzyMatch>
+where
+    F: Fn(&T) -> &str,
+{
+    if query.is_empty() {
+        return (0..items.len())
+            .map(|index| FuzzyMatch { index, score: 0 })
+            .collect();
+    }
+
+    let mut matcher = Matcher::new(Config::DEFAULT);
+    let pattern = Pattern::parse(query, CaseMatching::Ignore, Normalization::Smart);
+
+    items
+        .iter()
+        .enumerate()
+        .filter_map(|(index, item)| {
+            let text = get_text(item);
+            let mut buf = Vec::new();
+            let haystack = Utf32Str::new(text, &mut buf);
+            pattern
+                .score(haystack, &mut matcher)
+                .map(|score| FuzzyMatch { index, score })
+        })
+        .collect()
+}
+
 /// Returns indices of matched items in relevance order (best match first).
 /// If query is empty, returns all indices in original order.
 pub fn fuzzy_filter<T, F>(items: &[T], query: &str, get_text: F) -> Vec<usize>
@@ -11,24 +44,9 @@ where
         return (0..items.len()).collect();
     }
 
-    let mut matcher = Matcher::new(Config::DEFAULT);
-    let pattern = Pattern::parse(query, CaseMatching::Ignore, Normalization::Smart);
-
-    let mut scored: Vec<(usize, u32)> = items
-        .iter()
-        .enumerate()
-        .filter_map(|(i, item)| {
-            let text = get_text(item);
-            let mut buf = Vec::new();
-            let haystack = Utf32Str::new(text, &mut buf);
-            pattern
-                .score(haystack, &mut matcher)
-                .map(|score| (i, score))
-        })
-        .collect();
-
-    scored.sort_by(|a, b| b.1.cmp(&a.1));
-    scored.into_iter().map(|(i, _)| i).collect()
+    let mut matches = fuzzy_matches(items, query, get_text);
+    matches.sort_by_key(|matched| std::cmp::Reverse(matched.score));
+    matches.into_iter().map(|matched| matched.index).collect()
 }
 
 #[cfg(test)]

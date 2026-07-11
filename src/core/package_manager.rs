@@ -15,7 +15,7 @@ impl PackageManager {
         match self {
             Self::Bun => vec!["run", script_name],
             Self::Pnpm => vec!["run", script_name],
-            Self::Yarn => vec![script_name],
+            Self::Yarn => vec!["run", script_name],
             Self::Npm => vec!["run", script_name],
         }
     }
@@ -204,8 +204,13 @@ mod tests {
     fn run_args_correct_for_each_pm() {
         assert_eq!(PackageManager::Bun.run_args("dev"), vec!["run", "dev"]);
         assert_eq!(PackageManager::Pnpm.run_args("dev"), vec!["run", "dev"]);
-        assert_eq!(PackageManager::Yarn.run_args("dev"), vec!["dev"]);
+        assert_eq!(PackageManager::Yarn.run_args("dev"), vec!["run", "dev"]);
         assert_eq!(PackageManager::Npm.run_args("dev"), vec!["run", "dev"]);
+    }
+
+    #[test]
+    fn yarn_run_args_include_run_for_builtin_like_script_name() {
+        assert_eq!(PackageManager::Yarn.run_args("add"), vec!["run", "add"]);
     }
 
     #[test]

@@ -1,34 +1,52 @@
-use crate::core::package_manager::PackageManager;
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
+
+use crate::core::package_manager::PackageManager;
 
 /// Execute a package.json script via the detected package manager.
 ///
 /// Inherits stdin/stdout/stderr so the child process can interact with the terminal.
 /// Returns the process exit code (or `1` on spawn failure / missing exit code).
 pub fn run_script(pm: PackageManager, script_name: &str, cwd: &Path) -> i32 {
-    let status = Command::new(pm.command_name())
-        .args(pm.run_args(script_name))
-        .current_dir(cwd)
-        .stdin(std::process::Stdio::inherit())
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status();
+    let mut command = script_command(pm, script_name, cwd, &HashMap::new(), "");
+    execute_command(&mut command, pm, script_name)
+}
 
-    match status {
-        Ok(s) => s.code().unwrap_or(1),
-        Err(e) => {
+fn script_command(
+    pm: PackageManager,
+    script_name: &str,
+    cwd: &Path,
+    env_vars: &HashMap<String, String>,
+    args: &str,
+) -> Command {
+    let mut command = Command::new(pm.command_name());
+    command.args(pm.run_args(script_name));
+
+    if !args.is_empty() {
+        command.args(args.split_whitespace());
+    }
+
+    command.envs(env_vars).current_dir(cwd);
+    command
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit());
+
+    command
+}
+
+fn execute_command(command: &mut Command, pm: PackageManager, script_name: &str) -> i32 {
+    match command.status() {
+        Ok(status) => status.code().unwrap_or(1),
+        Err(error) => {
+            let displayed_command = display_command(pm, script_name);
+
             eprintln!();
-            eprintln!(
-                "❌ Failed to run script: '{} {}'",
-                pm.command_name(),
-                script_name
-            );
+            eprintln!("❌ Failed to run script: '{displayed_command}'");
             eprintln!();
 
-            // Check if it's a command not found error
-            if e.kind() == std::io::ErrorKind::NotFound {
+            if error.kind() == std::io::ErrorKind::NotFound {
                 eprintln!(
                     "🔍 Package manager '{}' not found in PATH",
                     pm.command_name()
@@ -55,21 +73,24 @@ pub fn run_script(pm: PackageManager, script_name: &str, cwd: &Path) -> i32 {
                     }
                 }
             } else {
-                eprintln!("Error: {}", e);
+                eprintln!("Error: {error}");
                 eprintln!();
                 eprintln!("💡 Common issues:");
                 eprintln!("   - Check if the package manager is in your PATH");
-                eprintln!(
-                    "   - Try running the script manually: {} {}",
-                    pm.command_name(),
-                    script_name
-                );
+                eprintln!("   - Try running the script manually: {displayed_command}");
             }
 
             eprintln!();
             1
         }
     }
+}
+
+fn display_command(pm: PackageManager, script_name: &str) -> String {
+    std::iter::once(pm.command_name())
+        .chain(pm.run_args(script_name))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Execute a package.json script with additional environment variables and arguments.
@@ -86,127 +107,74 @@ pub fn run_script_with_config(
     env_vars: HashMap<String, String>,
     args: &str,
 ) -> i32 {
-    let mut cmd = Command::new(pm.command_name());
-    cmd.args(pm.run_args(script_name));
-
-    // Append additional arguments if provided
-    if !args.is_empty() {
-        for arg in args.split_whitespace() {
-            cmd.arg(arg);
-        }
-    }
-
-    // Inject environment variables
-    cmd.envs(env_vars);
-
-    cmd.current_dir(cwd)
-        .stdin(std::process::Stdio::inherit())
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit());
-
-    let status = cmd.status();
-
-    match status {
-        Ok(s) => s.code().unwrap_or(1),
-        Err(e) => {
-            eprintln!();
-            eprintln!(
-                "❌ Failed to run script: '{} {}'",
-                pm.command_name(),
-                script_name
-            );
-            eprintln!();
-
-            if e.kind() == std::io::ErrorKind::NotFound {
-                eprintln!(
-                    "🔍 Package manager '{}' not found in PATH",
-                    pm.command_name()
-                );
-                eprintln!();
-                eprintln!("💡 Install {} to continue:", pm);
-
-                match pm {
-                    PackageManager::Npm => {
-                        eprintln!("   - Download Node.js (includes npm): https://nodejs.org");
-                        eprintln!("   - Or use a version manager: nvm, fnm, volta");
-                    }
-                    PackageManager::Yarn => {
-                        eprintln!("   npm install -g yarn");
-                        eprintln!("   Or: https://yarnpkg.com/getting-started/install");
-                    }
-                    PackageManager::Pnpm => {
-                        eprintln!("   npm install -g pnpm");
-                        eprintln!("   Or: https://pnpm.io/installation");
-                    }
-                    PackageManager::Bun => {
-                        eprintln!("   curl -fsSL https://bun.sh/install | bash");
-                        eprintln!("   Or: https://bun.sh");
-                    }
-                }
-            } else {
-                eprintln!("Error: {}", e);
-                eprintln!();
-                eprintln!("💡 Common issues:");
-                eprintln!("   - Check if the package manager is in your PATH");
-                eprintln!(
-                    "   - Try running the script manually: {} {}",
-                    pm.command_name(),
-                    script_name
-                );
-            }
-
-            eprintln!();
-            1
-        }
-    }
+    let mut command = script_command(pm, script_name, cwd, &env_vars, args);
+    execute_command(&mut command, pm, script_name)
 }
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsStr;
+
     use super::*;
 
     #[test]
-    fn run_args_are_forwarded_correctly() {
-        // Verify the command construction is correct for each PM
-        let pm = PackageManager::Npm;
-        let args = pm.run_args("test");
-        assert_eq!(args, vec!["run", "test"]);
+    fn script_command_sets_program_script_and_configured_arguments() {
+        let command = script_command(
+            PackageManager::Yarn,
+            "add",
+            Path::new("/tmp/project"),
+            &HashMap::new(),
+            "-- --watch",
+        );
 
-        let pm = PackageManager::Yarn;
-        let args = pm.run_args("test");
-        assert_eq!(args, vec!["test"]);
+        assert_eq!(command.get_program(), OsStr::new("yarn"));
+        assert_eq!(
+            command.get_args().collect::<Vec<_>>(),
+            ["run", "add", "--", "--watch"].map(OsStr::new)
+        );
     }
 
     #[test]
-    fn nonexistent_command_returns_1() {
-        // Trying to run a command that doesn't exist should return exit code 1
-        let code = Command::new("__nr_nonexistent_binary__")
-            .status()
-            .map(|s| s.code().unwrap_or(1))
-            .unwrap_or(1);
+    fn script_command_sets_current_directory() {
+        let cwd = Path::new("/tmp/project");
+
+        let command = script_command(PackageManager::Npm, "test", cwd, &HashMap::new(), "");
+
+        assert_eq!(command.get_current_dir(), Some(cwd));
+    }
+
+    #[test]
+    fn script_command_injects_environment_variables() {
+        let command = script_command(
+            PackageManager::Npm,
+            "test",
+            Path::new("/tmp/project"),
+            &HashMap::from([("NODE_ENV".to_string(), "test".to_string())]),
+            "",
+        );
+
+        assert_eq!(
+            command.get_envs().collect::<Vec<_>>(),
+            vec![(OsStr::new("NODE_ENV"), Some(OsStr::new("test")))]
+        );
+    }
+
+    #[test]
+    fn execute_command_returns_1_when_program_does_not_exist() {
+        let mut command = Command::new("__nr_test_binary_that_does_not_exist__");
+
+        let code = execute_command(&mut command, PackageManager::Npm, "test");
+
         assert_eq!(code, 1);
     }
 
     #[test]
-    fn test_run_script_with_config_constructs_command_correctly() {
-        // Test that env vars and args are properly prepared
-        let mut cmd = Command::new("echo");
-        let env_vars = HashMap::from([
-            ("KEY1".to_string(), "value1".to_string()),
-            ("KEY2".to_string(), "value2".to_string()),
-        ]);
-
-        cmd.envs(env_vars);
-        cmd.arg("test");
-
-        // Just verify the command builds without errors
-        assert!(true);
+    fn display_command_includes_npm_run_arguments() {
+        assert_eq!(display_command(PackageManager::Npm, "test"), "npm run test");
     }
 
     #[test]
-    fn test_args_parsing_splits_correctly() {
-        let args = "-- --watch --coverage";
-        let parsed: Vec<&str> = args.split_whitespace().collect();
-        assert_eq!(parsed, vec!["--", "--watch", "--coverage"]);
+    fn display_command_includes_yarn_run_arguments() {
+        assert_eq!(display_command(PackageManager::Yarn, "add"), "yarn run add");
     }
 }

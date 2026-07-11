@@ -708,6 +708,13 @@ fn wrap_index(current: usize, delta: i32, len: usize) -> usize {
     }
 }
 
+fn char_index_to_byte_index(input: &str, char_index: usize) -> usize {
+    input
+        .char_indices()
+        .nth(char_index)
+        .map_or(input.len(), |(byte_index, _)| byte_index)
+}
+
 /// Adjust scroll_offset so that `selected` stays visible within the given height.
 fn ensure_scroll(scroll_offset: &mut usize, selected: usize, visible_height: usize) {
     if selected < *scroll_offset {
@@ -817,6 +824,7 @@ impl App {
                 // Proceed to args input
                 self.mode = AppMode::ConfigureArgs;
                 self.args_input = self.execution_config.args.clone();
+                self.args_cursor_pos = self.args_input.chars().count();
                 self.args_history_index = None;
                 Action::Continue
             }
@@ -857,6 +865,8 @@ impl App {
     }
 
     fn handle_args_mode(&mut self, key: KeyEvent) -> Action {
+        self.args_cursor_pos = self.args_cursor_pos.min(self.args_input.chars().count());
+
         match key.code {
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => Action::Quit,
             KeyCode::Esc => {
@@ -882,7 +892,7 @@ impl App {
                         self.args_history_index = Some(new_idx);
                     }
                 }
-                self.args_cursor_pos = self.args_input.len();
+                self.args_cursor_pos = self.args_input.chars().count();
                 Action::Continue
             }
             KeyCode::Down => {
@@ -899,7 +909,7 @@ impl App {
                         self.args_history_index = Some(idx);
                     }
                 }
-                self.args_cursor_pos = self.args_input.len();
+                self.args_cursor_pos = self.args_input.chars().count();
                 Action::Continue
             }
             KeyCode::Left => {
@@ -911,7 +921,7 @@ impl App {
             }
             KeyCode::Right => {
                 // Move cursor right
-                if self.args_cursor_pos < self.args_input.len() {
+                if self.args_cursor_pos < self.args_input.chars().count() {
                     self.args_cursor_pos += 1;
                 }
                 Action::Continue
@@ -923,12 +933,13 @@ impl App {
             }
             KeyCode::End => {
                 // Move cursor to end
-                self.args_cursor_pos = self.args_input.len();
+                self.args_cursor_pos = self.args_input.chars().count();
                 Action::Continue
             }
             KeyCode::Char(c) => {
                 // Insert character at cursor position
-                self.args_input.insert(self.args_cursor_pos, c);
+                let byte_index = char_index_to_byte_index(&self.args_input, self.args_cursor_pos);
+                self.args_input.insert(byte_index, c);
                 self.args_cursor_pos += 1;
                 self.args_history_index = None;
                 Action::Continue
@@ -936,7 +947,9 @@ impl App {
             KeyCode::Backspace => {
                 // Delete character before cursor
                 if self.args_cursor_pos > 0 {
-                    self.args_input.remove(self.args_cursor_pos - 1);
+                    let byte_index =
+                        char_index_to_byte_index(&self.args_input, self.args_cursor_pos - 1);
+                    self.args_input.remove(byte_index);
                     self.args_cursor_pos -= 1;
                     self.args_history_index = None;
                 }
@@ -944,8 +957,10 @@ impl App {
             }
             KeyCode::Delete => {
                 // Delete character at cursor
-                if self.args_cursor_pos < self.args_input.len() {
-                    self.args_input.remove(self.args_cursor_pos);
+                if self.args_cursor_pos < self.args_input.chars().count() {
+                    let byte_index =
+                        char_index_to_byte_index(&self.args_input, self.args_cursor_pos);
+                    self.args_input.remove(byte_index);
                     self.args_history_index = None;
                 }
                 Action::Continue

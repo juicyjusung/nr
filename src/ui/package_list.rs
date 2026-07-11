@@ -37,7 +37,7 @@ pub fn render_package_list(
             Line::from(vec![
                 Span::styled("▎", Style::default().fg(Color::Cyan).bg(Color::DarkGray)),
                 Span::styled(
-                    format!("{:<width$}", &pkg.name, width = name_width),
+                    format!("{:<width$}", pkg.name, width = name_width),
                     Style::default().bold().bg(Color::DarkGray),
                 ),
                 Span::styled(
@@ -49,7 +49,7 @@ pub fn render_package_list(
             Line::from(vec![
                 Span::raw(" "),
                 Span::styled(
-                    format!("{:<width$}", &pkg.name, width = name_width),
+                    format!("{:<width$}", pkg.name, width = name_width),
                     Style::default(),
                 ),
                 Span::styled(&pkg.relative_path, Style::default().fg(Color::DarkGray)),
