@@ -32,7 +32,7 @@ This will create `assets/demo.gif`.
 
 ### Customizing the Demo
 
-Edit `demo.tape` to customize:
+Edit the repository-root `demo.tape` to customize:
 - **Theme**: Change `Set Theme` to any theme from [here](https://github.com/charmbracelet/vhs#themes)
 - **Size**: Adjust `Set Width` and `Set Height`
 - **Speed**: Modify `Sleep` durations

@@ -1,6 +1,23 @@
 use indexmap::IndexMap;
 use serde::Deserialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// Errors returned while reading a required `package.json`.
+#[derive(Debug, thiserror::Error)]
+pub enum PackageJsonError {
+    #[error("Failed to read {path}")]
+    Read {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("Failed to parse {path}")]
+    Parse {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+}
 
 /// Shared representation of a `package.json` file.
 ///
@@ -10,7 +27,7 @@ use std::path::Path;
 /// The `scripts` field is kept as raw `serde_json::Value` because
 /// real-world `package.json` files may contain non-string values
 /// that would cause strict `IndexMap<String, String>` deserialization to fail.
-#[derive(Deserialize, Default)]
+#[derive(Clone, Deserialize, Default)]
 pub struct PackageJson {
     pub name: Option<String>,
     scripts: Option<serde_json::Map<String, serde_json::Value>>,
@@ -20,11 +37,20 @@ pub struct PackageJson {
 }
 
 impl PackageJson {
+    /// Load and parse a required `package.json` from the given directory.
+    pub fn load_required(dir: &Path) -> Result<Self, PackageJsonError> {
+        let path = dir.join("package.json");
+        let contents = std::fs::read_to_string(&path).map_err(|source| PackageJsonError::Read {
+            path: path.clone(),
+            source,
+        })?;
+        serde_json::from_str(&contents).map_err(|source| PackageJsonError::Parse { path, source })
+    }
+
     /// Load and parse `package.json` from the given directory.
     /// Returns `None` if the file doesn't exist or cannot be parsed.
     pub fn load(dir: &Path) -> Option<Self> {
-        let contents = std::fs::read_to_string(dir.join("package.json")).ok()?;
-        serde_json::from_str(&contents).ok()
+        Self::load_required(dir).ok()
     }
 
     /// Extract scripts as an ordered map, filtering out non-string values.

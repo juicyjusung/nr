@@ -1,16 +1,19 @@
 use crate::core::env_files::{EnvFile, EnvFileList, scan_env_files};
+use crate::core::task_catalog::{
+    CatalogContext, CatalogTask, TaskCatalog, TaskHandle, TaskQuery, TaskUsageRecord,
+};
 use crate::core::workspaces::WorkspacePackage;
 use crate::fuzzy::fuzzy_filter;
-use crate::sort::{SortableScript, sort_scripts};
 use crate::store::args_history::{self, ArgsHistory};
 use crate::store::favorites;
 use crate::store::recents::{self, RecentEntry};
 use crate::store::script_configs::{self, ScriptConfig, ScriptConfigs};
+use crate::ui::script_list::TaskListItem;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use indexmap::IndexMap;
 use ratatui::layout::{Constraint, Layout};
 use ratatui::prelude::*;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::SystemTime;
 
@@ -50,6 +53,44 @@ pub enum Action {
     Quit,
 }
 
+fn task_list_item(task: &CatalogTask) -> TaskListItem {
+    TaskListItem {
+        key: task.persistence_key().to_string(),
+        scope_label: task.scope_label.clone(),
+        name: task.script_name.clone(),
+        command: task.command.clone(),
+    }
+}
+
+struct PackageGroup {
+    name: String,
+    scripts: IndexMap<String, String>,
+    task_handles: Vec<TaskHandle>,
+}
+
+impl PackageGroup {
+    fn new(name: String) -> Self {
+        Self {
+            name,
+            scripts: IndexMap::new(),
+            task_handles: Vec::new(),
+        }
+    }
+}
+
+fn query_catalog(
+    catalog: &TaskCatalog,
+    text: &str,
+    favorites: &HashSet<String>,
+    recents: &[RecentEntry],
+) -> Vec<TaskHandle> {
+    let usage: Vec<_> = recents
+        .iter()
+        .map(|entry| TaskUsageRecord::new(&entry.key, entry.last_run, entry.count))
+        .collect();
+    catalog.query(TaskQuery::new(text, favorites, &usage, recents::now_ms()))
+}
+
 pub struct App {
     // Navigation
     pub active_tab: Tab,
@@ -57,10 +98,14 @@ pub struct App {
     pub has_workspaces: bool,
 
     // Data
-    pub scripts: Vec<SortableScript>,
+    pub scripts: Vec<TaskListItem>,
     pub workspace_packages: Vec<WorkspacePackage>,
     pub nearest_pkg: PathBuf,
     pub monorepo_root: Option<PathBuf>,
+    catalog: TaskCatalog,
+    task_handles: Vec<TaskHandle>,
+    task_indices: HashMap<TaskHandle, usize>,
+    package_task_handles: Vec<Vec<TaskHandle>>,
 
     // State
     pub favorites: HashSet<String>,
@@ -91,7 +136,8 @@ pub struct App {
     pub pkg_script_selected_index: usize,
     pub pkg_script_scroll_offset: usize,
     pub pkg_script_filtered_indices: Vec<usize>,
-    pub pkg_script_sortable: Vec<SortableScript>,
+    pub pkg_script_items: Vec<TaskListItem>,
+    pkg_script_handles: Vec<TaskHandle>,
 
     // NEW: Configuration flow state
     pub mode: AppMode,
@@ -112,6 +158,7 @@ pub struct App {
     pub args_input: String,
     pub args_cursor_pos: usize, // NEW: cursor position in args_input
     pub args_history_index: Option<usize>,
+    pending_task: Option<TaskHandle>,
 }
 
 impl App {
@@ -127,20 +174,58 @@ impl App {
         package_manager_name: String,
         package_manager: crate::core::package_manager::PackageManager,
     ) -> Self {
-        let has_workspaces = !workspace_packages.is_empty();
+        let (catalog, context) = TaskCatalog::from_legacy_parts(
+            raw_scripts,
+            workspace_packages,
+            nearest_pkg,
+            monorepo_root,
+            project_name.clone(),
+        );
+        Self::build(
+            catalog,
+            context,
+            project_dir,
+            project_name,
+            project_path,
+            package_manager_name,
+            package_manager,
+        )
+    }
 
-        // Convert IndexMap to Vec<SortableScript>
-        let scripts: Vec<SortableScript> = raw_scripts
-            .iter()
-            .map(|(name, command)| SortableScript {
-                key: format!("root:{}", name),
-                name: name.clone(),
-                command: command.clone(),
-            })
-            .collect();
+    pub fn from_catalog(
+        discovery: (TaskCatalog, CatalogContext),
+        project_dir: &std::path::Path,
+        package_manager_name: String,
+        package_manager: crate::core::package_manager::PackageManager,
+    ) -> Self {
+        let (catalog, context) = discovery;
+        let project_name = context.project_name.clone();
+        let project_path = context.project_root.display().to_string();
+        Self::build(
+            catalog,
+            context,
+            project_dir,
+            project_name,
+            project_path,
+            package_manager_name,
+            package_manager,
+        )
+    }
+
+    fn build(
+        catalog: TaskCatalog,
+        context: CatalogContext,
+        project_dir: &std::path::Path,
+        project_name: String,
+        project_path: String,
+        package_manager_name: String,
+        package_manager: crate::core::package_manager::PackageManager,
+    ) -> Self {
+        let nearest_pkg = context.nearest_package;
+        let monorepo_root = context.monorepo_root;
 
         // Load persisted state from project-scoped directory
-        let favorites_data = favorites::load_favorites(project_dir);
+        let mut favorites_data = favorites::load_favorites(project_dir);
         let recents_data = recents::load_recents(project_dir);
         let script_configs_data =
             script_configs::load_script_configs(project_dir).unwrap_or_default();
@@ -148,8 +233,59 @@ impl App {
             crate::store::global_env::load_global_env_config(project_dir).unwrap_or_default();
         let args_history_data = args_history::load_args_history(project_dir).unwrap_or_default();
 
-        // Initial sort/filter
-        let filtered_indices = sort_scripts(&scripts, &favorites_data, &recents_data, "");
+        let initial_handles = query_catalog(&catalog, "", &favorites_data, &recents_data);
+        for handle in &initial_handles {
+            let Some(task) = catalog.resolve(*handle) else {
+                continue;
+            };
+            if task
+                .legacy_keys()
+                .iter()
+                .any(|key| favorites_data.contains(key))
+            {
+                favorites_data.insert(task.persistence_key().to_string());
+            }
+        }
+        let task_handles = query_catalog(&catalog, "", &favorites_data, &recents_data);
+        let scripts: Vec<_> = task_handles
+            .iter()
+            .filter_map(|handle| catalog.resolve(*handle).map(task_list_item))
+            .collect();
+        let task_indices: HashMap<_, _> = task_handles
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(index, handle)| (handle, index))
+            .collect();
+        let filtered_indices: Vec<_> = (0..task_handles.len()).collect();
+
+        let mut package_groups = BTreeMap::<String, PackageGroup>::new();
+        for handle in &task_handles {
+            let Some(task) = catalog.resolve(*handle) else {
+                continue;
+            };
+            if task.relative_path == "." {
+                continue;
+            }
+            let group = package_groups
+                .entry(task.relative_path.clone())
+                .or_insert_with(|| PackageGroup::new(task.package_name.clone()));
+            group
+                .scripts
+                .insert(task.script_name.clone(), task.command.clone());
+            group.task_handles.push(*handle);
+        }
+        let mut workspace_packages = Vec::with_capacity(package_groups.len());
+        let mut package_task_handles = Vec::with_capacity(package_groups.len());
+        for (relative_path, group) in package_groups {
+            workspace_packages.push(WorkspacePackage {
+                name: group.name,
+                relative_path,
+                scripts: group.scripts,
+            });
+            package_task_handles.push(group.task_handles);
+        }
+        let has_workspaces = !workspace_packages.is_empty();
 
         // Initial package filter (all packages, original order)
         let pkg_filtered_indices: Vec<usize> = (0..workspace_packages.len()).collect();
@@ -161,8 +297,12 @@ impl App {
 
             scripts,
             workspace_packages,
-            nearest_pkg: nearest_pkg.clone(),
-            monorepo_root: monorepo_root.clone(),
+            nearest_pkg,
+            monorepo_root,
+            catalog,
+            task_handles,
+            task_indices,
+            package_task_handles,
 
             favorites: favorites_data,
             recents: recents_data,
@@ -187,7 +327,8 @@ impl App {
             pkg_script_selected_index: 0,
             pkg_script_scroll_offset: 0,
             pkg_script_filtered_indices: Vec::new(),
-            pkg_script_sortable: Vec::new(),
+            pkg_script_items: Vec::new(),
+            pkg_script_handles: Vec::new(),
 
             // NEW: Configuration flow
             mode: AppMode::Normal,
@@ -208,6 +349,7 @@ impl App {
             args_input: String::new(),
             args_cursor_pos: 0,
             args_history_index: None,
+            pending_task: None,
         }
     }
 
@@ -341,7 +483,7 @@ impl App {
                     crate::ui::script_list::render_script_list(
                         frame,
                         chunks[3],
-                        &self.pkg_script_sortable,
+                        &self.pkg_script_items,
                         &self.pkg_script_filtered_indices,
                         self.pkg_script_selected_index,
                         self.pkg_script_scroll_offset,
@@ -438,81 +580,44 @@ impl App {
     }
 
     fn handle_enter(&mut self) -> Action {
-        match self.active_tab {
-            Tab::Scripts => {
-                if let Some(&script_idx) = self.filtered_indices.get(self.selected_index) {
-                    let script = &self.scripts[script_idx];
-                    let script_name = script.name.clone();
-                    let key = script.key.clone();
-
-                    // Record execution
-                    recents::record_execution(&mut self.recents, &key);
-
-                    Action::RunScript {
-                        script_name,
-                        cwd: self.nearest_pkg.clone(),
-                        env_files: vec![],
-                        args: String::new(),
-                    }
-                } else {
-                    Action::Continue
-                }
+        if self.active_tab == Tab::Packages
+            && matches!(self.package_mode, PackageMode::SelectingPackage)
+        {
+            if let Some(&package_index) = self.pkg_filtered_indices.get(self.pkg_selected_index) {
+                self.enter_package_scripts(package_index);
             }
-            Tab::Packages => match self.package_mode {
-                PackageMode::SelectingPackage => {
-                    if let Some(&pkg_idx) = self.pkg_filtered_indices.get(self.pkg_selected_index) {
-                        // Enter package script selection mode
-                        self.enter_package_scripts(pkg_idx);
-                    }
-                    Action::Continue
-                }
-                PackageMode::SelectingScript { package_index } => {
-                    if let Some(&script_idx) = self
-                        .pkg_script_filtered_indices
-                        .get(self.pkg_script_selected_index)
-                    {
-                        let script = &self.pkg_script_sortable[script_idx];
-                        let script_name = script.name.clone();
-                        let key = script.key.clone();
+            return Action::Continue;
+        }
 
-                        // Record execution
-                        recents::record_execution(&mut self.recents, &key);
+        let Some(handle) = self.selected_task_handle() else {
+            return Action::Continue;
+        };
+        let Some(task) = self.catalog.resolve(handle) else {
+            return Action::Continue;
+        };
+        let script_name = task.script_name.clone();
+        let cwd = task.cwd.clone();
+        let key = task.persistence_key().to_string();
+        recents::record_execution(&mut self.recents, &key);
 
-                        // cwd is the monorepo_root joined with the package's relative_path
-                        let pkg = &self.workspace_packages[package_index];
-                        let cwd = self
-                            .monorepo_root
-                            .as_ref()
-                            .map(|r| r.join(&pkg.relative_path))
-                            .unwrap_or_else(|| self.nearest_pkg.clone());
-
-                        Action::RunScript {
-                            script_name,
-                            cwd,
-                            env_files: vec![],
-                            args: String::new(),
-                        }
-                    } else {
-                        Action::Continue
-                    }
-                }
-            },
+        Action::RunScript {
+            script_name,
+            cwd,
+            env_files: Vec::new(),
+            args: String::new(),
         }
     }
 
     fn enter_package_scripts(&mut self, pkg_idx: usize) {
-        let pkg = &self.workspace_packages[pkg_idx];
-        let pkg_name = &pkg.name;
-
-        // Convert package scripts to SortableScript
-        self.pkg_script_sortable = pkg
-            .scripts
+        self.pkg_script_handles = self
+            .package_task_handles
+            .get(pkg_idx)
+            .cloned()
+            .unwrap_or_default();
+        self.pkg_script_items = self
+            .pkg_script_handles
             .iter()
-            .map(|(name, command)| SortableScript {
-                key: format!("{}:{}", pkg_name, name),
-                name: name.clone(),
-                command: command.clone(),
-            })
+            .filter_map(|handle| self.catalog.resolve(*handle).map(task_list_item))
             .collect();
 
         self.package_mode = PackageMode::SelectingScript {
@@ -522,13 +627,7 @@ impl App {
         self.pkg_script_selected_index = 0;
         self.pkg_script_scroll_offset = 0;
 
-        // Initial filter: all scripts sorted
-        self.pkg_script_filtered_indices = sort_scripts(
-            &self.pkg_script_sortable,
-            &self.favorites,
-            &self.recents,
-            "",
-        );
+        self.update_pkg_script_filtered();
     }
 
     fn move_selection(&mut self, delta: i32) {
@@ -582,26 +681,28 @@ impl App {
     }
 
     fn toggle_fav(&mut self) {
+        let Some(handle) = self.selected_task_handle() else {
+            return;
+        };
+        let Some(task) = self.catalog.resolve(handle) else {
+            return;
+        };
+        let canonical = task.persistence_key().to_string();
+        let legacy = task.legacy_keys().to_vec();
+        let is_favorite = self.favorites.contains(&canonical)
+            || legacy.iter().any(|key| self.favorites.contains(key));
+        if is_favorite {
+            self.favorites.remove(&canonical);
+            for key in legacy {
+                self.favorites.remove(&key);
+            }
+        } else {
+            self.favorites.insert(canonical);
+        }
+
         match self.active_tab {
-            Tab::Scripts => {
-                if let Some(&script_idx) = self.filtered_indices.get(self.selected_index) {
-                    let key = self.scripts[script_idx].key.clone();
-                    favorites::toggle_favorite(&mut self.favorites, &key);
-                    self.update_filtered();
-                }
-            }
-            Tab::Packages => {
-                if let PackageMode::SelectingScript { .. } = self.package_mode {
-                    if let Some(&script_idx) = self
-                        .pkg_script_filtered_indices
-                        .get(self.pkg_script_selected_index)
-                    {
-                        let key = self.pkg_script_sortable[script_idx].key.clone();
-                        favorites::toggle_favorite(&mut self.favorites, &key);
-                        self.update_pkg_script_filtered();
-                    }
-                }
-            }
+            Tab::Scripts => self.update_filtered(),
+            Tab::Packages => self.update_pkg_script_filtered(),
         }
     }
 
@@ -645,7 +746,10 @@ impl App {
 
     fn update_filtered(&mut self) {
         self.filtered_indices =
-            sort_scripts(&self.scripts, &self.favorites, &self.recents, &self.query);
+            query_catalog(&self.catalog, &self.query, &self.favorites, &self.recents)
+                .into_iter()
+                .filter_map(|handle| self.task_indices.get(&handle).copied())
+                .collect();
         self.selected_index = 0;
         self.scroll_offset = 0;
     }
@@ -658,12 +762,19 @@ impl App {
     }
 
     fn update_pkg_script_filtered(&mut self) {
-        self.pkg_script_filtered_indices = sort_scripts(
-            &self.pkg_script_sortable,
+        self.pkg_script_filtered_indices = query_catalog(
+            &self.catalog,
+            &self.pkg_script_query,
             &self.favorites,
             &self.recents,
-            &self.pkg_script_query,
-        );
+        )
+        .into_iter()
+        .filter_map(|handle| {
+            self.pkg_script_handles
+                .iter()
+                .position(|candidate| *candidate == handle)
+        })
+        .collect();
         self.pkg_script_selected_index = 0;
         self.pkg_script_scroll_offset = 0;
     }
@@ -690,6 +801,28 @@ impl App {
             self.pkg_script_selected_index,
             self.visible_height,
         );
+    }
+
+    fn selected_task_handle(&self) -> Option<TaskHandle> {
+        match self.active_tab {
+            Tab::Scripts => self
+                .filtered_indices
+                .get(self.selected_index)
+                .and_then(|index| self.task_handles.get(*index))
+                .copied(),
+            Tab::Packages => match self.package_mode {
+                PackageMode::SelectingPackage => None,
+                PackageMode::SelectingScript { .. } => self
+                    .pkg_script_filtered_indices
+                    .get(self.pkg_script_selected_index)
+                    .and_then(|index| self.pkg_script_handles.get(*index))
+                    .copied(),
+            },
+        }
+    }
+
+    fn current_task_handle(&self) -> Option<TaskHandle> {
+        self.pending_task.or_else(|| self.selected_task_handle())
     }
 }
 
@@ -730,18 +863,35 @@ impl App {
     // NEW: Configuration flow methods
 
     fn start_configure_flow(&mut self) {
-        // Get current script key
-        let script_key = self.get_current_script_key();
+        let Some(handle) = self.selected_task_handle() else {
+            return;
+        };
+        let Some(task) = self.catalog.resolve(handle) else {
+            return;
+        };
+        let cwd = task.cwd.clone();
+        let canonical_config_key = self.config_key(task.persistence_key());
+        let legacy_config_keys: Vec<_> = task
+            .legacy_keys()
+            .iter()
+            .map(|key| self.config_key(key))
+            .collect();
+        self.pending_task = Some(handle);
 
         // Restore script-specific args (if exists)
-        if let Some(config) = self.script_configs.get(&script_key) {
+        let restored_config = self.script_configs.get(&canonical_config_key).or_else(|| {
+            legacy_config_keys
+                .iter()
+                .filter_map(|key| self.script_configs.get(key))
+                .max_by_key(|config| config.last_used)
+        });
+        if let Some(config) = restored_config {
             self.execution_config.args = config.args.clone();
         } else {
             self.execution_config = ExecutionConfig::default();
         }
 
         // Scan .env files
-        let cwd = self.get_current_cwd();
         self.env_files_list = Some(scan_env_files(&cwd, &self.monorepo_root));
 
         // Pre-select globally last used env files
@@ -765,49 +915,16 @@ impl App {
         self.mode = AppMode::ConfigureEnv;
     }
 
-    fn get_current_script_key(&self) -> String {
-        let project_id = crate::store::project_id::project_id(&self.config_dir);
-
-        match self.active_tab {
-            Tab::Scripts => {
-                if let Some(&script_idx) = self.filtered_indices.get(self.selected_index) {
-                    let script = &self.scripts[script_idx];
-                    format!("{}:{}", project_id, script.key)
-                } else {
-                    format!("{}:unknown", project_id)
-                }
-            }
-            Tab::Packages => match self.package_mode {
-                PackageMode::SelectingScript { package_index: _ } => {
-                    if let Some(&script_idx) = self
-                        .pkg_script_filtered_indices
-                        .get(self.pkg_script_selected_index)
-                    {
-                        let script = &self.pkg_script_sortable[script_idx];
-                        format!("{}:{}", project_id, script.key)
-                    } else {
-                        format!("{}:unknown", project_id)
-                    }
-                }
-                _ => format!("{}:unknown", project_id),
-            },
-        }
+    fn config_key(&self, task_key: &str) -> String {
+        let legacy_project_id = crate::store::project_id::project_id(&self.config_dir);
+        format!("{legacy_project_id}:{task_key}")
     }
 
     fn get_current_cwd(&self) -> PathBuf {
-        match self.active_tab {
-            Tab::Scripts => self.nearest_pkg.clone(),
-            Tab::Packages => match self.package_mode {
-                PackageMode::SelectingScript { package_index } => {
-                    let pkg = &self.workspace_packages[package_index];
-                    self.monorepo_root
-                        .as_ref()
-                        .map(|r| r.join(&pkg.relative_path))
-                        .unwrap_or_else(|| self.nearest_pkg.clone())
-                }
-                _ => self.nearest_pkg.clone(),
-            },
-        }
+        self.current_task_handle()
+            .and_then(|handle| self.catalog.resolve(handle))
+            .map(|task| task.cwd.clone())
+            .unwrap_or_else(|| self.nearest_pkg.clone())
     }
 
     fn handle_env_mode(&mut self, key: KeyEvent) -> Action {
@@ -818,6 +935,7 @@ impl App {
                 self.mode = AppMode::Normal;
                 self.execution_config = ExecutionConfig::default();
                 self.env_files_list = None;
+                self.pending_task = None;
                 Action::Continue
             }
             KeyCode::Enter => {
@@ -978,10 +1096,19 @@ impl App {
                 Action::Continue
             }
             KeyCode::Enter => {
-                // Execute with configuration
-                let script_key = self.get_current_script_key();
-                let script_name = self.get_current_script_name();
-                let cwd = self.get_current_cwd();
+                let Some(handle) = self.pending_task else {
+                    self.mode = AppMode::Normal;
+                    return Action::Continue;
+                };
+                let Some(task) = self.catalog.resolve(handle) else {
+                    self.mode = AppMode::Normal;
+                    self.pending_task = None;
+                    return Action::Continue;
+                };
+                let script_name = task.script_name.clone();
+                let cwd = task.cwd.clone();
+                let execution_key = task.persistence_key().to_string();
+                let script_key = self.config_key(&execution_key);
 
                 // Save script-specific args
                 self.script_configs.insert(
@@ -1013,8 +1140,6 @@ impl App {
                     let _ = args_history::save_args_history(&self.config_dir, &self.args_history);
                 }
 
-                // Record execution in recents
-                let execution_key = script_key.split(':').skip(1).collect::<Vec<_>>().join(":");
                 recents::record_execution(&mut self.recents, &execution_key);
 
                 // Build env file paths in merge order (root → package, so package overrides root)
@@ -1030,6 +1155,7 @@ impl App {
 
                 // Reset mode
                 self.mode = AppMode::Normal;
+                self.pending_task = None;
 
                 Action::RunScript {
                     script_name,
@@ -1043,41 +1169,22 @@ impl App {
     }
 
     fn get_current_script_name(&self) -> String {
-        match self.active_tab {
-            Tab::Scripts => {
-                if let Some(&script_idx) = self.filtered_indices.get(self.selected_index) {
-                    self.scripts[script_idx].name.clone()
-                } else {
-                    String::new()
-                }
-            }
-            Tab::Packages => match self.package_mode {
-                PackageMode::SelectingScript { .. } => {
-                    if let Some(&script_idx) = self
-                        .pkg_script_filtered_indices
-                        .get(self.pkg_script_selected_index)
-                    {
-                        self.pkg_script_sortable[script_idx].name.clone()
-                    } else {
-                        String::new()
-                    }
-                }
-                _ => String::new(),
-            },
-        }
+        self.current_task_handle()
+            .and_then(|handle| self.catalog.resolve(handle))
+            .map(|task| task.script_name.clone())
+            .unwrap_or_default()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::args_history::ArgsHistory;
-    use crate::store::script_configs::ScriptConfigs;
 
-    // Test helper to create SortableScript
-    fn script(name: &str, command: &str) -> SortableScript {
-        SortableScript {
+    // Test helper to create a task list item.
+    fn script(name: &str, command: &str) -> TaskListItem {
+        TaskListItem {
             key: format!("root:{}", name),
+            scope_label: "root".to_string(),
             name: name.to_string(),
             command: command.to_string(),
         }
@@ -1085,7 +1192,7 @@ mod tests {
 
     // Test builder for App
     struct TestAppBuilder {
-        scripts: Vec<SortableScript>,
+        scripts: Vec<TaskListItem>,
         workspace_packages: Vec<WorkspacePackage>,
         favorites: HashSet<String>,
         recents: Vec<RecentEntry>,
@@ -1105,7 +1212,7 @@ mod tests {
             }
         }
 
-        fn with_scripts(mut self, scripts: Vec<SortableScript>) -> Self {
+        fn with_scripts(mut self, scripts: Vec<TaskListItem>) -> Self {
             self.scripts = scripts;
             self
         }
@@ -1122,57 +1229,28 @@ mod tests {
         }
 
         fn build(self) -> App {
-            let filtered_indices = sort_scripts(&self.scripts, &self.favorites, &self.recents, "");
-            let pkg_filtered_indices: Vec<usize> = (0..self.workspace_packages.len()).collect();
-
-            App {
-                active_tab: Tab::Scripts,
-                package_mode: PackageMode::SelectingPackage,
-                has_workspaces: self.has_workspaces,
-                scripts: self.scripts,
-                workspace_packages: self.workspace_packages,
-                nearest_pkg: PathBuf::from("/test/project"),
-                monorepo_root: None,
-                favorites: self.favorites,
-                recents: self.recents,
-                project_name: "test-project".to_string(),
-                project_path: "/test/project".to_string(),
-                package_manager_name: "npm".to_string(),
-                visible_height: self.visible_height,
-                query: String::new(),
-                selected_index: 0,
-                scroll_offset: 0,
-                filtered_indices,
-                pkg_query: String::new(),
-                pkg_selected_index: 0,
-                pkg_scroll_offset: 0,
-                pkg_filtered_indices,
-                pkg_script_query: String::new(),
-                pkg_script_selected_index: 0,
-                pkg_script_scroll_offset: 0,
-                pkg_script_filtered_indices: Vec::new(),
-                pkg_script_sortable: Vec::new(),
-
-                // NEW: Config flow fields (test defaults)
-                mode: AppMode::Normal,
-                execution_config: ExecutionConfig::default(),
-                script_configs: ScriptConfigs::new(),
-                global_env_config: crate::store::global_env::GlobalEnvConfig::default(),
-                args_history: ArgsHistory::new(),
-                config_dir: PathBuf::from("/test/.config/nr"),
-                package_manager: crate::core::package_manager::PackageManager::Npm,
-
-                // NEW: Env selection UI state (test defaults)
-                env_files_list: None,
-                env_selected_index: 0,
-                env_scroll_offset: 0,
-                env_selected_files: HashSet::new(),
-
-                // NEW: Args input UI state (test defaults)
-                args_input: String::new(),
-                args_cursor_pos: 0,
-                args_history_index: None,
-            }
+            let raw_scripts = self
+                .scripts
+                .into_iter()
+                .map(|script| (script.name, script.command))
+                .collect();
+            let mut app = App::new(
+                raw_scripts,
+                self.workspace_packages,
+                PathBuf::from("/test/project"),
+                None,
+                std::path::Path::new("/test/.config/nr"),
+                "test-project".to_string(),
+                "/test/project".to_string(),
+                "npm".to_string(),
+                crate::core::package_manager::PackageManager::Npm,
+            );
+            app.favorites = self.favorites;
+            app.recents = self.recents;
+            app.visible_height = self.visible_height;
+            app.has_workspaces = self.has_workspaces;
+            app.update_filtered();
+            app
         }
     }
 
@@ -1256,11 +1334,11 @@ mod tests {
             .with_scripts(vec![script("test", "echo test")])
             .build();
 
-        let key = "root:test";
-        assert!(!app.favorites.contains(key));
+        let key = app.scripts[app.filtered_indices[0]].key.clone();
+        assert!(!app.favorites.contains(&key));
 
         app.toggle_fav();
-        assert!(app.favorites.contains(key));
+        assert!(app.favorites.contains(&key));
     }
 
     #[test]
@@ -1399,7 +1477,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_filtered_with_query_filters_correctly() {
+    fn test_update_filtered_prioritizes_script_name_match() {
         let mut app = TestAppBuilder::new()
             .with_scripts(vec![
                 script("build", "echo build"),
@@ -1411,8 +1489,6 @@ mod tests {
         app.query = "te".to_string();
         app.update_filtered();
 
-        // Should only match "test"
-        assert_eq!(app.filtered_indices.len(), 1);
         assert_eq!(app.scripts[app.filtered_indices[0]].name, "test");
     }
 

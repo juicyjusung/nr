@@ -45,7 +45,7 @@ cd path/to/project
 nr
 ```
 
-Start typing to filter scripts. Press `Enter` to run the selected script, or `Tab` to choose environment files and add arguments first.
+Start typing to filter project-wide scripts by script name, package, workspace path, or command. Press `Enter` to run the selected script, or `Tab` to choose environment files and add arguments first.
 
 ## More installation options
 
@@ -83,10 +83,10 @@ Alpine/musl and 32-bit binaries are not currently published.
 
 | Capability | Behavior |
 | --- | --- |
-| Find | Fuzzy-matches script and package names as you type. |
+| Find | Fuzzy-matches script names first, then package names, workspace paths, and command text across the whole project. |
 | Prioritize | Ranks by fuzzy relevance while searching; with no query, puts favorites first and orders the rest by frecency. |
 | Configure | Selects `.env*` files, accepts additional arguments, and previews the run before execution. |
-| Browse workspaces | Finds packages from the `workspaces` field in `package.json` or from `pnpm-workspace.yaml`, then runs scripts in the package directory. |
+| Browse workspaces | Shows root and workspace scripts together in Scripts while retaining the Packages tab for package-first navigation. |
 | Detect and run | Chooses npm, pnpm, Yarn, or Bun from project metadata and invokes it as `<manager> run <script>`. |
 
 `nr` is distributed as a single executable; you do not install a global Node package to launch it. The package-manager CLI used by your project must still be available in `PATH` so `nr` can run its scripts.
@@ -143,9 +143,9 @@ Starting from the current directory, `nr` walks upward to find the nearest `pack
 - a `workspaces` array or `workspaces.packages` array in `package.json`; or
 - a `packages` list in `pnpm-workspace.yaml`.
 
-When workspace packages are found, the Packages tab lets you search packages, open one, and run its scripts with that package as the working directory.
+The Scripts tab combines runnable scripts from the monorepo root, the launch package, and every declared workspace package. Each row identifies its root or package scope, and the selected script always runs in the directory that declares it. The Packages tab remains available for package-first navigation and resolves to the same tasks.
 
-The nearest `package.json` must contain at least one string-valued script. If a monorepo root has no scripts of its own, start `nr` from a workspace package that does.
+A monorepo root does not need scripts of its own. `nr` opens whenever any discovered package has a string-valued script and reports a project-wide no-scripts error only when the root and all declared workspaces are empty. Overlapping workspace patterns are deduplicated, and negative pnpm workspace patterns are respected.
 
 ## Package-manager detection
 

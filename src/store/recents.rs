@@ -56,10 +56,7 @@ pub fn save_recents(config_dir: &Path, recents: &[RecentEntry]) -> Result<()> {
 /// * `recents` - Mutable reference to the recents Vec
 /// * `key` - The script key that was executed
 pub fn record_execution(recents: &mut Vec<RecentEntry>, key: &str) {
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u64;
+    let now_ms = now_ms();
 
     // Find existing entry and update it
     if let Some(entry) = recents.iter_mut().find(|e| e.key == key) {
@@ -99,18 +96,14 @@ pub fn record_execution(recents: &mut Vec<RecentEntry>, key: &str) {
 /// # Returns
 /// A frecency score (higher is better)
 pub fn frecency_score(count: u32, last_run_ms: u64, now_ms: u64) -> f64 {
-    let age_in_days = (now_ms.saturating_sub(last_run_ms)) as f64 / (1000.0 * 60.0 * 60.0 * 24.0);
-    let halflife = 14.0;
-    let frequency_score = ((count + 1) as f64).log2() + 1.0;
-    frequency_score * (0.5_f64).powf(age_in_days / halflife)
+    crate::core::task_catalog::frecency_score(count, last_run_ms, now_ms)
 }
 
 /// Returns the current time in milliseconds since UNIX epoch.
 pub fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u64
+        .map_or(0, |duration| duration.as_millis() as u64)
 }
 
 #[cfg(test)]

@@ -23,7 +23,7 @@ fn main() -> Result<()> {
         println!("USAGE: nr");
         println!();
         println!("Run in a directory containing package.json to interactively");
-        println!("browse and execute npm scripts.");
+        println!("search and execute scripts across the current project.");
         println!();
         println!("OPTIONS:");
         println!("  -h, --help            Print this help message");
@@ -36,13 +36,12 @@ fn main() -> Result<()> {
 
     // 1. Core discovery (before TUI)
     let cwd = std::env::current_dir().context("Failed to get current directory")?;
-    let root = core::project_root::find_project_root(&cwd)?;
-
-    let pm_root = root.monorepo_root.as_ref().unwrap_or(&root.nearest_pkg);
-    let proj_id = store::project_id::project_id(pm_root);
 
     // Handle reset commands (no TUI needed)
     if wants_any_reset {
+        let root = core::project_root::find_project_root(&cwd)?;
+        let project_root = root.monorepo_root.as_ref().unwrap_or(&root.nearest_pkg);
+        let proj_id = store::project_id::project_id(project_root);
         let project_dir = store::config_path::get_project_dir(&proj_id);
         return handle_reset(
             &project_dir,
@@ -53,53 +52,14 @@ fn main() -> Result<()> {
         );
     }
 
-    let package_manager = core::package_manager::detect_package_manager(pm_root);
-    let scripts = core::scripts::load_scripts(&root.nearest_pkg);
-
-    if scripts.is_empty() {
-        eprintln!(
-            "❌ No scripts found in {}/package.json",
-            root.nearest_pkg.display()
-        );
-        eprintln!();
-        eprintln!("💡 To use nr, add scripts to your package.json:");
-        eprintln!("   {{");
-        eprintln!("     \"scripts\": {{");
-        eprintln!("       \"dev\": \"vite\",");
-        eprintln!("       \"build\": \"vite build\",");
-        eprintln!("       \"test\": \"vitest\"");
-        eprintln!("     }}");
-        eprintln!("   }}");
-        eprintln!();
-        eprintln!("📖 Learn more: https://docs.npmjs.com/cli/v10/using-npm/scripts");
-        process::exit(1);
-    }
-
-    let workspace_packages = root
-        .monorepo_root
-        .as_ref()
-        .map(|r| core::workspaces::scan_workspaces(r))
-        .unwrap_or_default();
-
+    let discovery = core::task_catalog::TaskCatalog::discover(&cwd)?;
+    let project_root = discovery.1.project_root.clone();
+    let proj_id = store::project_id::project_id(&project_root);
+    let package_manager = core::package_manager::detect_package_manager(&project_root);
     let project_dir = store::config_path::ensure_project_dir(&proj_id);
-
-    let project_name = core::package_json::PackageJson::load(&root.nearest_pkg)
-        .and_then(|pkg| pkg.name)
-        .unwrap_or_else(|| "unknown".to_string());
-    let project_path = pm_root.to_string_lossy().to_string();
     let pm_name = package_manager.to_string();
 
-    let mut app = app::App::new(
-        scripts,
-        workspace_packages,
-        root.nearest_pkg,
-        root.monorepo_root,
-        &project_dir,
-        project_name,
-        project_path,
-        pm_name,
-        package_manager,
-    );
+    let mut app = app::App::from_catalog(discovery, &project_dir, pm_name, package_manager);
     let initial_favorites = app.favorites.clone();
     let outcome = ratatui::run(|terminal| run_tui(terminal, &mut app));
     let action = finalize_tui_session(&project_dir, &initial_favorites, &app, outcome)?;

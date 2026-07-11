@@ -1,5 +1,5 @@
 # Demo for nr - Interactive npm script runner
-# Shows fuzzy search and monorepo support
+# Shows project-wide fuzzy search and monorepo package navigation
 
 Output assets/demo.gif
 
@@ -15,10 +15,10 @@ Set TypingSpeed 60ms
 
 # Setup
 Hide
-Type "cd /Users/user/projects/juicy-nr/examples/demo-project"
+Type "cd examples/demo-project"
 Enter
 Sleep 300ms
-Type "export PATH=/Users/user/projects/juicy-nr/target/release:$PATH"
+Type "export PATH=../../target/release:$PATH"
 Enter
 Sleep 200ms
 Type "clear"
@@ -27,15 +27,13 @@ Show
 
 Sleep 300ms
 
-# Intro - quick typing
+# Start from a workspace-only monorepo root
 Type@30ms "nr"
 Sleep 400ms
 Enter
-
-# Wait for load
 Sleep 1.5s
 
-# Fuzzy search demo - visible typing
+# Fuzzy search across workspace scripts
 Type@100ms "tst"
 Sleep 1.5s
 
@@ -48,13 +46,11 @@ Sleep 1.5s
 Backspace@60ms 3
 Sleep 500ms
 
-# Navigation
+# Navigate and favorite a unified task
 Down
 Sleep 500ms
 Down
 Sleep 500ms
-
-# Favorite
 Space
 Sleep 1s
 
@@ -63,7 +59,7 @@ Sleep 400ms
 Down
 Sleep 400ms
 
-# Packages tab
+# Retained package-first navigation
 Right
 Sleep 1.5s
 
@@ -72,7 +68,6 @@ Sleep 600ms
 Down
 Sleep 600ms
 
-# View package
 Enter
 Sleep 1.5s
 
@@ -81,14 +76,11 @@ Sleep 500ms
 Down
 Sleep 500ms
 
-# Back
 Escape
 Sleep 800ms
 
 Left
 Sleep 1s
 
-# Exit
-Sleep 1s
 Escape
 Sleep 500ms

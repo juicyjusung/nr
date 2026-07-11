@@ -1,5 +1,6 @@
 use crate::core::package_json::PackageJson;
 use indexmap::IndexMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// A package discovered inside a monorepo workspace.
@@ -22,35 +23,58 @@ pub fn scan_workspaces(monorepo_root: &Path) -> Vec<WorkspacePackage> {
         return Vec::new();
     }
 
-    let mut packages = Vec::new();
+    let positive_patterns: Vec<_> = patterns
+        .iter()
+        .filter(|pattern| !pattern.starts_with('!'))
+        .collect();
+    let negative_patterns: Vec<_> = patterns
+        .iter()
+        .filter_map(|pattern| pattern.strip_prefix('!'))
+        .collect();
+    let excluded: HashSet<PathBuf> = negative_patterns
+        .into_iter()
+        .flat_map(|pattern| expand_glob_pattern(monorepo_root, pattern))
+        .map(|path| canonical_path(&path))
+        .collect();
+    let mut package_dirs = HashMap::<PathBuf, PathBuf>::new();
 
-    for pattern in &patterns {
-        let matched_dirs = expand_glob_pattern(monorepo_root, pattern);
-        for dir in matched_dirs {
+    for pattern in positive_patterns {
+        for dir in expand_glob_pattern(monorepo_root, pattern) {
             let pkg_path = dir.join("package.json");
             if !pkg_path.is_file() {
                 continue;
             }
-
-            let relative = dir
-                .strip_prefix(monorepo_root)
-                .unwrap_or(&dir)
-                .to_string_lossy()
-                .replace('\\', "/");
-
-            let (name, scripts) = read_package_info(&dir);
-
-            packages.push(WorkspacePackage {
-                name,
-                relative_path: relative,
-                scripts,
-            });
+            let canonical = canonical_path(&dir);
+            if !excluded.contains(&canonical) {
+                package_dirs.entry(canonical).or_insert(dir);
+            }
         }
+    }
+
+    let mut packages = Vec::with_capacity(package_dirs.len());
+    for dir in package_dirs.into_values() {
+        let relative = dir
+            .strip_prefix(monorepo_root)
+            .unwrap_or(&dir)
+            .to_string_lossy()
+            .replace('\\', "/");
+
+        let (name, scripts) = read_package_info(&dir);
+
+        packages.push(WorkspacePackage {
+            name,
+            relative_path: relative,
+            scripts,
+        });
     }
 
     // Sort by relative path for deterministic output
     packages.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
     packages
+}
+
+pub(crate) fn canonical_path(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 /// Extract workspace patterns from package.json or pnpm-workspace.yaml.

@@ -7,7 +7,6 @@
 pub mod app;
 pub mod core;
 pub mod fuzzy;
-pub mod sort;
 pub mod store;
 pub mod ui;
 

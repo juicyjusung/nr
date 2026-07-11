@@ -42,8 +42,7 @@ src/
 ├── main.rs    CLI startup, TUI lifecycle, persistence, and script execution
 ├── app.rs     Application state machine and input handling
 ├── fuzzy.rs   Fuzzy-matching adapter
-├── sort.rs    Favorites, frecency, and fuzzy-result ordering
-├── core/      Project discovery, package data, environment files, and execution
+├── core/      Project-wide task discovery/query, package data, environment files, and execution
 ├── store/     JSON-backed user preferences and execution history
 └── ui/        Stateless Ratatui rendering functions
 ```
@@ -89,7 +88,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) for commit mess
 
 ```text
 feat(ui): add keyboard shortcut help
-fix(sort): preserve fuzzy relevance
+fix(catalog): preserve fuzzy relevance
 docs(readme): clarify installation
 ```
 

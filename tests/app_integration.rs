@@ -72,8 +72,8 @@ fn test_complete_workflow_search_filter_and_select() {
     app.handle_key(key_char('e'));
     assert_eq!(app.query, "te");
 
-    // Should filter to only "test"
-    assert_eq!(app.filtered_indices.len(), 1);
+    // Script-name relevance should put "test" ahead of incidental command matches.
+    assert_eq!(app.scripts[app.filtered_indices[0]].name, "test");
     assert_eq!(app.selected_index, 0);
 
     // Press Enter to run

@@ -12,7 +12,7 @@ Binary name: `nr`
 cargo build              # Debug build
 cargo build --release    # Release build (~1.1 MB, LTO + strip + panic=abort)
 cargo test               # Run all tests
-cargo test sort          # Run sort module tests only
+cargo test --test task_catalog_integration  # Run task catalog integration tests only
 cargo clippy             # Lint
 cargo fmt -- --check     # Format check
 ```
@@ -26,11 +26,10 @@ src/
 ├── main.rs          # CLI entry, scoped TUI lifecycle, and script execution
 ├── app.rs           # Central state machine (App struct), event loop, input handling
 ├── fuzzy.rs         # Fuzzy matching wrapper (nucleo-matcher)
-├── sort.rs          # Frecency-based sorting algorithm + tests
 ├── core/            # Business logic (stateless)
+│   ├── task_catalog.rs     # Project-wide task discovery, query ordering, and resolution
 │   ├── package_manager.rs  # Lockfile-based PM detection (bun > pnpm > yarn > npm)
 │   ├── project_root.rs     # Two-phase upward traversal for package.json / monorepo root
-│   ├── scripts.rs          # Load scripts from package.json
 │   ├── workspaces.rs       # Glob-based workspace package scanning
 │   ├── runner.rs           # Execute scripts via detected package manager
 │   ├── env_files.rs        # Scan and load .env files (NEW)
@@ -67,7 +66,7 @@ src/
 
 ### Data Flow
 
-1. `main.rs`: discover project root -> detect package manager -> load scripts -> scan workspaces
+1. `main.rs`: discover the project-wide task catalog -> detect package manager
 2. Load persisted favorites/recents/configs from `~/.config/nr/{project_id}/` keyed by SHA-256 project ID
 3. Enter TUI event loop (`App::handle_key` -> `Action`)
 4. On `Action::RunScript`: exit TUI, save state, exec script via `process::exit()`
@@ -78,15 +77,15 @@ src/
    - Save configuration per script key
    - Execute with injected env vars and additional arguments
 
-### Sorting Algorithm (sort.rs)
+### Task Query Ordering (`core/task_catalog.rs`)
 
 - **No query**: Favorites (alphabetical) -> Frecency score -> Alphabetical
 - **With query**: Fuzzy relevance -> Favorites break ties -> Frecency breaks ties
-- Frecency formula: `count * 0.5^(age_days / 14)`
+- Frecency formula: `(log2(count + 1) + 1) * 0.5^(age_days / 14)`
 
 ### Script Key Format
 
-`{project_id}:{scope}:{name}` where scope is `root` or package name.
+Canonical task keys use a versioned, length-prefixed project-relative path and script name. Legacy `root:{name}` and `{package}:{name}` keys are still read when they identify exactly one task.
 
 ### Configuration Storage
 
