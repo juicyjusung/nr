@@ -14,7 +14,7 @@ crossterm = "0.29"
 nucleo-matcher = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-serde_yaml_ng = "0.9"
+serde_yaml_ng = "0.10"
 indexmap = { version = "2", features = ["serde"] }
 dirs = "6"
 globset = "0.4"
