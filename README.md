@@ -172,16 +172,7 @@ cd nr
 cargo build --release --locked
 ```
 
-Before contributing, run these local checks:
-
-```bash
-cargo fmt -- --check
-cargo clippy --all-targets --all-features --locked -- -D warnings
-cargo test --all-targets --all-features --locked
-cargo build --release --locked
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and the exact CI-compatible checks to run before opening a pull request.
 
 ## Support
 

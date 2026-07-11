@@ -8,7 +8,7 @@
 
 ## Verification
 
-<!-- List exact commands and manual checks. Do not write "tests pass" without naming them. -->
+<!-- List exact commands and manual checks. Do not write "tests pass" without naming them. When an issue owns this change, record final verification there too. -->
 
 - [ ] `cargo fmt -- --check`
 - [ ] `cargo clippy --all-targets --all-features --locked -- -D warnings`
@@ -24,4 +24,4 @@
 - [ ] I added or updated tests for behavior changes, or explained why no test is needed.
 - [ ] I updated documentation for user-visible changes.
 - [ ] I removed secrets, environment-variable values, and private package data from this PR.
-- [ ] I linked the issue this PR resolves, when one exists.
+- [ ] I linked the owning issue and recorded final verification there, when one exists.

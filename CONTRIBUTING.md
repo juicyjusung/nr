@@ -101,7 +101,7 @@ In the pull request:
 - Describe user-visible or compatibility effects, including any migration needs.
 - List the exact automated and manual verification performed.
 - Update documentation when commands, behavior, storage, or support change.
-- Link the issue the pull request resolves, when one exists.
+- Link the issue the pull request resolves, when one exists, and record final verification on that owning issue as the project record.
 
 CI runs formatting, Clippy, MSRV, and tests on Linux, macOS, and Windows. Address failures rather than suppressing a lint or weakening a test.
 
